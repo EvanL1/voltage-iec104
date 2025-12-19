@@ -123,7 +123,10 @@ impl Decoder for Iec104Codec {
     type Item = Apdu;
     type Error = Iec104Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> std::result::Result<Option<Self::Item>, Self::Error> {
+    fn decode(
+        &mut self,
+        src: &mut BytesMut,
+    ) -> std::result::Result<Option<Self::Item>, Self::Error> {
         loop {
             match &self.state {
                 DecodeState::WaitingForStart => {

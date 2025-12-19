@@ -13,7 +13,6 @@ pub enum TypeId {
     // ============================================
     // Process information in monitoring direction
     // ============================================
-
     /// Single-point information (M_SP_NA_1)
     SinglePoint = 1,
 
@@ -65,7 +64,6 @@ pub enum TypeId {
     // ============================================
     // Process information in control direction
     // ============================================
-
     /// Single command (C_SC_NA_1)
     SingleCommand = 45,
 
@@ -99,14 +97,12 @@ pub enum TypeId {
     // ============================================
     // System information in monitoring direction
     // ============================================
-
     /// End of initialization (M_EI_NA_1)
     EndOfInit = 70,
 
     // ============================================
     // System information in control direction
     // ============================================
-
     /// Interrogation command (C_IC_NA_1)
     InterrogationCommand = 100,
 

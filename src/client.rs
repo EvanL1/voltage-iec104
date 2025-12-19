@@ -14,7 +14,7 @@ use futures::{SinkExt, StreamExt};
 
 use crate::codec::{Apdu, Iec104Codec};
 use crate::error::{Iec104Error, Result};
-use crate::types::{Asdu, AsduHeader, Cot, Cp56Time2a, Ioa, InformationObject, TypeId, UFunction};
+use crate::types::{Asdu, AsduHeader, Cot, Cp56Time2a, InformationObject, Ioa, TypeId, UFunction};
 
 /// Default IEC 104 port.
 pub const DEFAULT_PORT: u16 = 2404;

@@ -82,8 +82,7 @@ pub fn parse_asdu(asdu: &Asdu) -> Result<Vec<DataPoint>> {
         | TypeId::TestCommandTime56 => Ok(Vec::new()),
 
         // Time-tagged variants without CP56Time2a
-        TypeId::SinglePointTime24
-        | TypeId::DoublePointTime24 => {
+        TypeId::SinglePointTime24 | TypeId::DoublePointTime24 => {
             // These have 3-byte time tag (CP24Time2a), not full timestamp
             // Parse as regular without timestamp for now
             match type_id {
@@ -165,7 +164,7 @@ fn parse_single_point(
 /// Parse single-point with CP24Time2a (M_SP_TA_1).
 fn parse_single_point_time24(data: &[u8], count: usize, sequence: bool) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     // Element size: SIQ (1) + CP24Time2a (3)
     let element_size = 4;
@@ -218,7 +217,7 @@ fn parse_double_point(
     with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = if with_time { 1 + 7 } else { 1 };
 
@@ -280,7 +279,7 @@ fn parse_double_point(
 /// Parse double-point with CP24Time2a (M_DP_TA_1).
 fn parse_double_point_time24(data: &[u8], count: usize, sequence: bool) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = 4; // DIQ (1) + CP24Time2a (3)
 
@@ -338,7 +337,7 @@ fn parse_step_position(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = 2; // VTI (1) + QDS (1)
 
@@ -396,7 +395,7 @@ fn parse_bitstring(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = 5; // BSI (4) + QDS (1)
 
@@ -456,7 +455,7 @@ fn parse_measured_normalized(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = 3; // NVA (2) + QDS (1)
 
@@ -512,7 +511,7 @@ fn parse_measured_scaled(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = 3; // SVA (2) + QDS (1)
 
@@ -567,7 +566,7 @@ fn parse_measured_float(
     with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = if with_time { 5 + 7 } else { 5 }; // IEEE float (4) + QDS (1) + optional CP56Time2a
 
@@ -635,7 +634,7 @@ fn parse_integrated_totals(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset = 0;
+    let mut offset;
 
     let element_size = 5; // BCR (4) + sequence/flags (1)
 

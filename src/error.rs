@@ -93,10 +93,7 @@ impl Iec104Error {
     pub fn is_connection_error(&self) -> bool {
         matches!(
             self,
-            Self::Connection(_)
-                | Self::NotConnected
-                | Self::ConnectionTimeout
-                | Self::T3Timeout
+            Self::Connection(_) | Self::NotConnected | Self::ConnectionTimeout | Self::T3Timeout
         )
     }
 

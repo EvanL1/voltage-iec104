@@ -2,7 +2,6 @@
 //!
 //! APCI is the 6-byte header of an APDU, containing frame type and sequence numbers.
 
-
 use crate::error::{Iec104Error, Result};
 
 /// Start byte for IEC 104 frames.
@@ -186,7 +185,9 @@ impl Apci {
     pub fn encode_header(&self, asdu_len: usize) -> [u8; 6] {
         let control = self.encode();
         let apdu_len = (4 + asdu_len) as u8;
-        [START_BYTE, apdu_len, control[0], control[1], control[2], control[3]]
+        [
+            START_BYTE, apdu_len, control[0], control[1], control[2], control[3],
+        ]
     }
 
     /// Check if this is an I-frame.
