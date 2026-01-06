@@ -418,9 +418,9 @@ impl Iec104Client {
         }
 
         // Check timeouts and determine actions needed
-        let need_test_frame = self.last_recv_time.elapsed() > self.config.t3_timeout;
-        let need_s_frame =
-            self.unconfirmed_recvs > 0 && self.last_recv_time.elapsed() > self.config.t2_timeout;
+        let elapsed_since_recv = self.last_recv_time.elapsed();
+        let need_test_frame = elapsed_since_recv > self.config.t3_timeout;
+        let need_s_frame = self.unconfirmed_recvs > 0 && elapsed_since_recv > self.config.t2_timeout;
 
         // Check T3 timeout (need to send test frame)
         if need_test_frame {
@@ -458,10 +458,7 @@ impl Iec104Client {
     async fn send_u_frame(&mut self, function: UFunction) -> Result<()> {
         let framed = self.framed.as_mut().ok_or(Iec104Error::NotConnected)?;
         let apdu = Apdu::u_frame(function);
-        framed
-            .send(apdu)
-            .await
-            .map_err(|e| Iec104Error::Codec(std::borrow::Cow::Owned(e.to_string())))?;
+        framed.send(apdu).await?;
         self.last_send_time = Instant::now();
         Ok(())
     }
@@ -469,10 +466,7 @@ impl Iec104Client {
     async fn send_s_frame(&mut self) -> Result<()> {
         let framed = self.framed.as_mut().ok_or(Iec104Error::NotConnected)?;
         let apdu = Apdu::s_frame(self.recv_seq);
-        framed
-            .send(apdu)
-            .await
-            .map_err(|e| Iec104Error::Codec(std::borrow::Cow::Owned(e.to_string())))?;
+        framed.send(apdu).await?;
         self.last_send_time = Instant::now();
         self.unconfirmed_recvs = 0;
         Ok(())
@@ -485,12 +479,9 @@ impl Iec104Client {
 
         let framed = self.framed.as_mut().ok_or(Iec104Error::NotConnected)?;
         let apdu = Apdu::i_frame(self.send_seq, self.recv_seq, asdu);
-        framed
-            .send(apdu)
-            .await
-            .map_err(|e| Iec104Error::Codec(std::borrow::Cow::Owned(e.to_string())))?;
+        framed.send(apdu).await?;
 
-        self.send_seq = (self.send_seq + 1) % 32768;
+        self.send_seq = (self.send_seq + 1) & 0x7FFF;
         self.unconfirmed_sends += 1;
         self.last_send_time = Instant::now();
         self.unconfirmed_recvs = 0; // Piggyback acknowledgment
@@ -525,7 +516,7 @@ impl Iec104Client {
                     });
                 }
 
-                self.recv_seq = (self.recv_seq + 1) % 32768;
+                self.recv_seq = (self.recv_seq + 1) & 0x7FFF;
                 self.unconfirmed_recvs += 1;
 
                 // Send S-frame if W threshold reached
@@ -563,13 +554,11 @@ impl Iec104Client {
     }
 
     fn acknowledge_up_to(&mut self, recv_seq: u16) {
-        // Calculate number of acknowledged frames
-        let acked = if recv_seq >= self.send_seq - self.unconfirmed_sends {
-            recv_seq - (self.send_seq - self.unconfirmed_sends)
-        } else {
-            // Wrap around
-            (32768 - (self.send_seq - self.unconfirmed_sends)) + recv_seq
-        };
+        // IEC 104 sequence numbers are 15-bit (0..32767).
+        const SEQ_MASK: u16 = 0x7FFF;
+
+        let oldest_unacked = self.send_seq.wrapping_sub(self.unconfirmed_sends) & SEQ_MASK;
+        let acked = recv_seq.wrapping_sub(oldest_unacked) & SEQ_MASK;
 
         if acked <= self.unconfirmed_sends {
             self.unconfirmed_sends -= acked;

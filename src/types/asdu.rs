@@ -591,6 +591,18 @@ impl Asdu {
         })
     }
 
+    /// Parse ASDU from bytes without copying the payload.
+    pub fn parse_bytes(data: Bytes) -> Result<Self> {
+        let (header, header_len) = AsduHeader::parse(data.as_ref())?;
+        let raw_data = data.slice(header_len..);
+
+        Ok(Self {
+            header,
+            objects: Vec::new(),
+            raw_data,
+        })
+    }
+
     /// Encode ASDU to bytes.
     pub fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(self.encoded_len());

@@ -26,6 +26,10 @@ pub fn parse_asdu(asdu: &Asdu) -> Result<Vec<DataPoint>> {
     let count = asdu.header.vsq.count as usize;
     let sequence = asdu.header.vsq.sequence;
 
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+
     if data.is_empty() && count > 0 {
         return Err(Iec104Error::invalid_asdu_static("Empty data for non-zero count"));
     }
@@ -106,11 +110,15 @@ fn parse_single_point(
     // Calculate element size
     let element_size = if with_time { 1 + 7 } else { 1 }; // SIQ + optional CP56Time2a
 
-    // First IOA (always present)
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
+    let first_ioa = read_ioa_le(data);
     let mut offset = 3;
 
     for i in 0..count {
@@ -118,20 +126,12 @@ fn parse_single_point(
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        // Check data length
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // Parse SIQ (Single-point Information with Quality)
         let siq = data[offset];
@@ -162,34 +162,31 @@ fn parse_single_point(
 /// Parse single-point with CP24Time2a (M_SP_TA_1).
 fn parse_single_point_time24(data: &[u8], count: usize, sequence: bool) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     // Element size: SIQ (1) + CP24Time2a (3)
     let element_size = 4;
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         let siq = data[offset];
         let value = (siq & 0x01) != 0;
@@ -215,33 +212,30 @@ fn parse_double_point(
     with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = if with_time { 1 + 7 } else { 1 };
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // Parse DIQ (Double-point Information with Quality)
         let diq = data[offset];
@@ -277,33 +271,30 @@ fn parse_double_point(
 /// Parse double-point with CP24Time2a (M_DP_TA_1).
 fn parse_double_point_time24(data: &[u8], count: usize, sequence: bool) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = 4; // DIQ (1) + CP24Time2a (3)
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         let diq = data[offset];
         let dp_value = match diq & 0x03 {
@@ -335,33 +326,30 @@ fn parse_step_position(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = 2; // VTI (1) + QDS (1)
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // VTI: Value with Transient Indicator
         let vti = data[offset];
@@ -393,33 +381,30 @@ fn parse_bitstring(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = 5; // BSI (4) + QDS (1)
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // BSI: Bitstring of 32 bit
         let value = u32::from_le_bytes([
@@ -453,33 +438,30 @@ fn parse_measured_normalized(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = 3; // NVA (2) + QDS (1)
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // NVA: Normalized Value (16-bit signed, -1.0 to ~+1.0)
         let raw = i16::from_le_bytes([data[offset], data[offset + 1]]);
@@ -509,33 +491,30 @@ fn parse_measured_scaled(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = 3; // SVA (2) + QDS (1)
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // SVA: Scaled Value
         let value = i16::from_le_bytes([data[offset], data[offset + 1]]);
@@ -564,33 +543,30 @@ fn parse_measured_float(
     with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = if with_time { 5 + 7 } else { 5 }; // IEEE float (4) + QDS (1) + optional CP56Time2a
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // IEEE 754 short floating point
         let value = f32::from_le_bytes([
@@ -632,33 +608,30 @@ fn parse_integrated_totals(
     _with_time: bool,
 ) -> Result<Vec<DataPoint>> {
     let mut points = Vec::with_capacity(count);
-    let mut offset;
 
     let element_size = 5; // BCR (4) + sequence/flags (1)
 
-    if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
+    let required_len = if sequence {
+        3 + count * element_size
+    } else {
+        count * (3 + element_size)
+    };
+    if data.len() < required_len {
+        return Err(Iec104Error::invalid_asdu_static("Data too short"));
     }
-    let first_ioa = parse_ioa(&data[0..3])?;
-    offset = 3;
+    let first_ioa = read_ioa_le(data);
+    let mut offset = 3;
 
     for i in 0..count {
         let ioa = if sequence {
             first_ioa + i as u32
         } else if i > 0 {
-            if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu_static("Data too short"));
-            }
-            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            let ioa = read_ioa_le(&data[offset..]);
             offset += 3;
             ioa
         } else {
             first_ioa
         };
-
-        if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
-        }
 
         // BCR: Binary Counter Reading
         let value = i32::from_le_bytes([
@@ -697,15 +670,6 @@ fn parse_integrated_totals(
     }
 
     Ok(points)
-}
-
-/// Parse IOA from 3 bytes (little-endian).
-#[inline(always)]
-fn parse_ioa(bytes: &[u8]) -> Result<u32> {
-    if bytes.len() < 3 {
-        return Err(Iec104Error::invalid_asdu_static("IOA too short"));
-    }
-    Ok(read_ioa_le(bytes))
 }
 
 /// Read IOA as little-endian u24 (assumes bytes.len() >= 3).
@@ -1263,12 +1227,11 @@ mod tests {
         let points = parse_asdu(&asdu).unwrap();
 
         assert_eq!(points.len(), 5);
-        for i in 0..5 {
-            assert_eq!(points[i].ioa, 100 + i as u32);
-            if let DataValue::Float(v) = points[i].value {
-                assert!((v - (i as f32) * 10.0).abs() < 0.001);
-            } else {
-                panic!("Expected Float value");
+        for (i, point) in points.iter().enumerate() {
+            assert_eq!(point.ioa, 100 + i as u32);
+            match &point.value {
+                DataValue::Float(v) => assert!((*v - (i as f32) * 10.0).abs() < 0.001),
+                _ => panic!("Expected Float value"),
             }
         }
     }

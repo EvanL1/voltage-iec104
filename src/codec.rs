@@ -136,13 +136,16 @@ impl Decoder for Iec104Codec {
                         return Ok(None);
                     }
 
-                    // Skip bytes until we find the start byte
-                    while !src.is_empty() && src[0] != START_BYTE {
-                        src.advance(1);
-                    }
-
-                    if src.is_empty() {
-                        return Ok(None);
+                    if src[0] != START_BYTE {
+                        // Skip bytes until we find the start byte (fast-path: advance once)
+                        let start_pos = src.iter().position(|&b| b == START_BYTE);
+                        match start_pos {
+                            Some(pos) => src.advance(pos),
+                            None => {
+                                src.clear();
+                                return Ok(None);
+                            }
+                        }
                     }
 
                     self.state = DecodeState::WaitingForLength;
@@ -182,7 +185,7 @@ impl Decoder for Iec104Codec {
                     }
 
                     // We have a complete frame
-                    let frame = src.split_to(total_length);
+                    let frame = src.split_to(total_length).freeze();
                     self.state = DecodeState::WaitingForStart;
 
                     // Parse the frame
@@ -191,7 +194,7 @@ impl Decoder for Iec104Codec {
                     let apci = Apci::parse(control)?;
 
                     let asdu = if apci.is_i_frame() && frame.len() > 6 {
-                        Some(Asdu::parse(&frame[6..])?)
+                        Some(Asdu::parse_bytes(frame.slice(6..))?)
                     } else {
                         None
                     };
@@ -342,21 +345,19 @@ mod tests {
             UFunction::TestFrCon,
         ] {
             let mut buf = BytesMut::new();
-            let original = Apdu::u_frame(func);
-            codec.encode(original.clone(), &mut buf).unwrap();
+            codec.encode(Apdu::u_frame(func), &mut buf).unwrap();
 
             let decoded = codec.decode(&mut buf).unwrap().unwrap();
-            assert_eq!(decoded.apci, original.apci);
+            assert_eq!(decoded.apci, Apci::u_frame(func));
         }
 
         // Test S-frame roundtrip
         for recv_seq in [0, 100, 32767] {
             let mut buf = BytesMut::new();
-            let original = Apdu::s_frame(recv_seq);
-            codec.encode(original.clone(), &mut buf).unwrap();
+            codec.encode(Apdu::s_frame(recv_seq), &mut buf).unwrap();
 
             let decoded = codec.decode(&mut buf).unwrap().unwrap();
-            assert_eq!(decoded.apci, original.apci);
+            assert_eq!(decoded.apci, Apci::s_frame(recv_seq));
         }
     }
 
