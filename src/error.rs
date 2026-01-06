@@ -142,4 +142,127 @@ mod tests {
         assert!(Iec104Error::T1Timeout.is_retryable());
         assert!(!Iec104Error::NotConnected.is_retryable());
     }
+
+    // ============ Additional Error Tests ============
+
+    #[test]
+    fn test_error_helper_constructors() {
+        let err = Iec104Error::protocol("test protocol error");
+        assert!(err.to_string().contains("test protocol error"));
+
+        let err = Iec104Error::invalid_frame("bad frame");
+        assert!(err.to_string().contains("bad frame"));
+
+        let err = Iec104Error::invalid_asdu("bad asdu");
+        assert!(err.to_string().contains("bad asdu"));
+    }
+
+    #[test]
+    fn test_error_display_all_variants() {
+        // Test all error variants have proper Display
+        let errors = [
+            Iec104Error::Connection("test".to_string()),
+            Iec104Error::NotConnected,
+            Iec104Error::ConnectionTimeout,
+            Iec104Error::Protocol("test".to_string()),
+            Iec104Error::InvalidFrame("test".to_string()),
+            Iec104Error::InvalidAsdu("test".to_string()),
+            Iec104Error::UnknownTypeId(255),
+            Iec104Error::SequenceMismatch { expected: 10, actual: 20 },
+            Iec104Error::T1Timeout,
+            Iec104Error::T2Timeout,
+            Iec104Error::T3Timeout,
+            Iec104Error::TooManyUnconfirmed(100),
+            Iec104Error::ChannelClosed,
+            Iec104Error::Codec("test".to_string()),
+            Iec104Error::Internal("test".to_string()),
+        ];
+
+        for err in errors {
+            let display = err.to_string();
+            assert!(!display.is_empty(), "Display for {:?} should not be empty", err);
+        }
+    }
+
+    #[test]
+    fn test_connection_error_variants() {
+        assert!(Iec104Error::Connection("addr".to_string()).is_connection_error());
+        assert!(Iec104Error::NotConnected.is_connection_error());
+        assert!(Iec104Error::ConnectionTimeout.is_connection_error());
+        assert!(Iec104Error::T3Timeout.is_connection_error());
+
+        // Non-connection errors
+        assert!(!Iec104Error::T1Timeout.is_connection_error());
+        assert!(!Iec104Error::T2Timeout.is_connection_error());
+        assert!(!Iec104Error::Protocol("test".to_string()).is_connection_error());
+        assert!(!Iec104Error::InvalidFrame("test".to_string()).is_connection_error());
+        assert!(!Iec104Error::ChannelClosed.is_connection_error());
+    }
+
+    #[test]
+    fn test_retryable_error_variants() {
+        assert!(Iec104Error::ConnectionTimeout.is_retryable());
+        assert!(Iec104Error::T1Timeout.is_retryable());
+        assert!(Iec104Error::T2Timeout.is_retryable());
+        assert!(Iec104Error::T3Timeout.is_retryable());
+
+        // Non-retryable errors
+        assert!(!Iec104Error::NotConnected.is_retryable());
+        assert!(!Iec104Error::Connection("test".to_string()).is_retryable());
+        assert!(!Iec104Error::Protocol("test".to_string()).is_retryable());
+        assert!(!Iec104Error::InvalidFrame("test".to_string()).is_retryable());
+        assert!(!Iec104Error::InvalidAsdu("test".to_string()).is_retryable());
+        assert!(!Iec104Error::UnknownTypeId(1).is_retryable());
+        assert!(!Iec104Error::SequenceMismatch { expected: 1, actual: 2 }.is_retryable());
+        assert!(!Iec104Error::TooManyUnconfirmed(10).is_retryable());
+        assert!(!Iec104Error::ChannelClosed.is_retryable());
+        assert!(!Iec104Error::Codec("test".to_string()).is_retryable());
+        assert!(!Iec104Error::Internal("test".to_string()).is_retryable());
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        use std::io::{Error as IoError, ErrorKind};
+        let io_err = IoError::new(ErrorKind::ConnectionRefused, "connection refused");
+        let iec_err: Iec104Error = io_err.into();
+
+        if let Iec104Error::Io(e) = iec_err {
+            assert_eq!(e.kind(), ErrorKind::ConnectionRefused);
+        } else {
+            panic!("Expected Io variant");
+        }
+    }
+
+    #[test]
+    fn test_sequence_mismatch_display() {
+        let err = Iec104Error::SequenceMismatch {
+            expected: 100,
+            actual: 50,
+        };
+        let display = err.to_string();
+        assert!(display.contains("100"));
+        assert!(display.contains("50"));
+    }
+
+    #[test]
+    fn test_too_many_unconfirmed_display() {
+        let err = Iec104Error::TooManyUnconfirmed(12);
+        let display = err.to_string();
+        assert!(display.contains("12"));
+    }
+
+    #[test]
+    fn test_unknown_type_id_display() {
+        let err = Iec104Error::UnknownTypeId(99);
+        let display = err.to_string();
+        assert!(display.contains("99"));
+    }
+
+    #[test]
+    fn test_error_debug() {
+        // Ensure Debug is implemented
+        let err = Iec104Error::NotConnected;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("NotConnected"));
+    }
 }

@@ -287,4 +287,192 @@ mod tests {
         assert_eq!(TypeId::MeasuredFloat.standard_name(), "M_ME_NC_1");
         assert_eq!(TypeId::SingleCommand.standard_name(), "C_SC_NA_1");
     }
+
+    // ============ Additional TypeId Tests ============
+
+    #[test]
+    fn test_type_id_all_values_roundtrip() {
+        let valid_values = [
+            1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 15,
+            30, 31, 36,
+            45, 46, 47, 48, 49, 50, 51,
+            58, 59, 63,
+            70,
+            100, 101, 102, 103, 104, 105, 107,
+        ];
+
+        for val in valid_values {
+            let type_id = TypeId::from_u8(val).unwrap();
+            assert_eq!(type_id.as_u8(), val, "Roundtrip failed for value {}", val);
+        }
+    }
+
+    #[test]
+    fn test_type_id_invalid_values() {
+        // Test some invalid type IDs
+        let invalid_values = [0, 6, 8, 16, 17, 29, 32, 44, 52, 60, 71, 99, 106, 108, 200, 255];
+
+        for val in invalid_values {
+            let result = TypeId::from_u8(val);
+            assert!(result.is_err(), "Expected error for TypeId value {}", val);
+        }
+    }
+
+    #[test]
+    fn test_type_id_monitoring_types() {
+        // All M_ types should be monitoring
+        let monitoring_types = [
+            TypeId::SinglePoint,
+            TypeId::SinglePointTime24,
+            TypeId::DoublePoint,
+            TypeId::DoublePointTime24,
+            TypeId::StepPosition,
+            TypeId::Bitstring32,
+            TypeId::MeasuredNormalized,
+            TypeId::MeasuredNormalizedTime24,
+            TypeId::MeasuredScaled,
+            TypeId::MeasuredScaledTime24,
+            TypeId::MeasuredFloat,
+            TypeId::MeasuredFloatTime24,
+            TypeId::IntegratedTotals,
+            TypeId::SinglePointTime56,
+            TypeId::DoublePointTime56,
+            TypeId::MeasuredFloatTime56,
+            TypeId::EndOfInit,
+        ];
+
+        for type_id in monitoring_types {
+            assert!(type_id.is_monitoring(), "{:?} should be monitoring", type_id);
+        }
+    }
+
+    #[test]
+    fn test_type_id_control_types() {
+        // All C_ types should be control
+        let control_types = [
+            TypeId::SingleCommand,
+            TypeId::DoubleCommand,
+            TypeId::RegulatingStep,
+            TypeId::SetpointNormalized,
+            TypeId::SetpointScaled,
+            TypeId::SetpointFloat,
+            TypeId::Bitstring32Command,
+            TypeId::SingleCommandTime56,
+            TypeId::DoubleCommandTime56,
+            TypeId::SetpointFloatTime56,
+            TypeId::InterrogationCommand,
+            TypeId::CounterInterrogation,
+            TypeId::ReadCommand,
+            TypeId::ClockSync,
+            TypeId::TestCommand,
+            TypeId::ResetProcess,
+            TypeId::TestCommandTime56,
+        ];
+
+        for type_id in control_types {
+            assert!(type_id.is_control(), "{:?} should be control", type_id);
+        }
+    }
+
+    #[test]
+    fn test_type_id_time_tagged_types() {
+        // Types with time tags
+        let time_tagged = [
+            TypeId::SinglePointTime24,
+            TypeId::DoublePointTime24,
+            TypeId::MeasuredNormalizedTime24,
+            TypeId::MeasuredScaledTime24,
+            TypeId::MeasuredFloatTime24,
+            TypeId::SinglePointTime56,
+            TypeId::DoublePointTime56,
+            TypeId::MeasuredFloatTime56,
+            TypeId::SingleCommandTime56,
+            TypeId::DoubleCommandTime56,
+            TypeId::SetpointFloatTime56,
+            TypeId::TestCommandTime56,
+        ];
+
+        for type_id in time_tagged {
+            assert!(type_id.has_time_tag(), "{:?} should have time tag", type_id);
+        }
+
+        // Types without time tags
+        let no_time_tag = [
+            TypeId::SinglePoint,
+            TypeId::DoublePoint,
+            TypeId::MeasuredFloat,
+            TypeId::SingleCommand,
+            TypeId::InterrogationCommand,
+        ];
+
+        for type_id in no_time_tag {
+            assert!(!type_id.has_time_tag(), "{:?} should not have time tag", type_id);
+        }
+    }
+
+    #[test]
+    fn test_type_id_display() {
+        // Display should use standard name
+        assert_eq!(format!("{}", TypeId::SinglePoint), "M_SP_NA_1");
+        assert_eq!(format!("{}", TypeId::MeasuredFloat), "M_ME_NC_1");
+        assert_eq!(format!("{}", TypeId::InterrogationCommand), "C_IC_NA_1");
+    }
+
+    #[test]
+    fn test_type_id_all_standard_names() {
+        // Verify all types have proper standard names
+        let types_and_names = [
+            (TypeId::SinglePoint, "M_SP_NA_1"),
+            (TypeId::SinglePointTime24, "M_SP_TA_1"),
+            (TypeId::DoublePoint, "M_DP_NA_1"),
+            (TypeId::DoublePointTime24, "M_DP_TA_1"),
+            (TypeId::StepPosition, "M_ST_NA_1"),
+            (TypeId::Bitstring32, "M_BO_NA_1"),
+            (TypeId::MeasuredNormalized, "M_ME_NA_1"),
+            (TypeId::MeasuredNormalizedTime24, "M_ME_TA_1"),
+            (TypeId::MeasuredScaled, "M_ME_NB_1"),
+            (TypeId::MeasuredScaledTime24, "M_ME_TB_1"),
+            (TypeId::MeasuredFloat, "M_ME_NC_1"),
+            (TypeId::MeasuredFloatTime24, "M_ME_TC_1"),
+            (TypeId::IntegratedTotals, "M_IT_NA_1"),
+            (TypeId::SinglePointTime56, "M_SP_TB_1"),
+            (TypeId::DoublePointTime56, "M_DP_TB_1"),
+            (TypeId::MeasuredFloatTime56, "M_ME_TF_1"),
+            (TypeId::SingleCommand, "C_SC_NA_1"),
+            (TypeId::DoubleCommand, "C_DC_NA_1"),
+            (TypeId::RegulatingStep, "C_RC_NA_1"),
+            (TypeId::SetpointNormalized, "C_SE_NA_1"),
+            (TypeId::SetpointScaled, "C_SE_NB_1"),
+            (TypeId::SetpointFloat, "C_SE_NC_1"),
+            (TypeId::Bitstring32Command, "C_BO_NA_1"),
+            (TypeId::SingleCommandTime56, "C_SC_TA_1"),
+            (TypeId::DoubleCommandTime56, "C_DC_TA_1"),
+            (TypeId::SetpointFloatTime56, "C_SE_TC_1"),
+            (TypeId::EndOfInit, "M_EI_NA_1"),
+            (TypeId::InterrogationCommand, "C_IC_NA_1"),
+            (TypeId::CounterInterrogation, "C_CI_NA_1"),
+            (TypeId::ReadCommand, "C_RD_NA_1"),
+            (TypeId::ClockSync, "C_CS_NA_1"),
+            (TypeId::TestCommand, "C_TS_NA_1"),
+            (TypeId::ResetProcess, "C_RP_NA_1"),
+            (TypeId::TestCommandTime56, "C_TS_TA_1"),
+        ];
+
+        for (type_id, expected_name) in types_and_names {
+            assert_eq!(type_id.standard_name(), expected_name, "Wrong name for {:?}", type_id);
+        }
+    }
+
+    #[test]
+    fn test_type_id_numeric_values() {
+        // Verify specific numeric values
+        assert_eq!(TypeId::SinglePoint.as_u8(), 1);
+        assert_eq!(TypeId::DoublePoint.as_u8(), 3);
+        assert_eq!(TypeId::MeasuredFloat.as_u8(), 13);
+        assert_eq!(TypeId::SinglePointTime56.as_u8(), 30);
+        assert_eq!(TypeId::SingleCommand.as_u8(), 45);
+        assert_eq!(TypeId::EndOfInit.as_u8(), 70);
+        assert_eq!(TypeId::InterrogationCommand.as_u8(), 100);
+        assert_eq!(TypeId::TestCommandTime56.as_u8(), 107);
+    }
 }

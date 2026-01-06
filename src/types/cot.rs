@@ -292,4 +292,135 @@ mod tests {
         assert!(Cot::InterrogatedByGroup1.is_interrogation_response());
         assert!(!Cot::Spontaneous.is_interrogation_response());
     }
+
+    // ============ Additional COT Tests ============
+
+    #[test]
+    fn test_cot_all_values_roundtrip() {
+        // Test all valid COT values
+        let valid_values = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+            20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+            37, 38, 39, 40, 41,
+            44, 45, 46, 47,
+        ];
+
+        for val in valid_values {
+            let cot = Cot::from_u8(val).unwrap();
+            assert_eq!(cot.as_u8(), val, "Roundtrip failed for value {}", val);
+        }
+    }
+
+    #[test]
+    fn test_cot_invalid_values() {
+        // Test invalid COT values
+        let invalid_values = [0, 14, 15, 16, 17, 18, 19, 42, 43, 48, 49, 50, 63];
+
+        for val in invalid_values {
+            let result = Cot::from_u8(val);
+            assert!(result.is_err(), "Expected error for COT value {}", val);
+        }
+    }
+
+    #[test]
+    fn test_cot_upper_bits_masked() {
+        // COT uses only lower 6 bits, upper 2 bits should be masked
+        // 0x43 = 0b0100_0011 -> lower 6 bits = 3 (Spontaneous)
+        let cot = Cot::from_u8(0x43).unwrap();
+        assert_eq!(cot, Cot::Spontaneous);
+
+        // 0x86 = 0b1000_0110 -> lower 6 bits = 6 (Activation)
+        let cot = Cot::from_u8(0x86).unwrap();
+        assert_eq!(cot, Cot::Activation);
+    }
+
+    #[test]
+    fn test_cot_is_counter_response() {
+        assert!(Cot::RequestedByGeneralCounter.is_counter_response());
+        assert!(Cot::RequestedByGroup1Counter.is_counter_response());
+        assert!(Cot::RequestedByGroup2Counter.is_counter_response());
+        assert!(Cot::RequestedByGroup3Counter.is_counter_response());
+        assert!(Cot::RequestedByGroup4Counter.is_counter_response());
+        assert!(!Cot::Spontaneous.is_counter_response());
+        assert!(!Cot::InterrogatedByStation.is_counter_response());
+    }
+
+    #[test]
+    fn test_cot_display_all() {
+        // Test that all COT values have Display implementation
+        let test_cases = [
+            (Cot::Periodic, "Periodic"),
+            (Cot::Background, "Background"),
+            (Cot::Spontaneous, "Spontaneous"),
+            (Cot::Initialized, "Initialized"),
+            (Cot::Request, "Request"),
+            (Cot::Activation, "Activation"),
+            (Cot::ActivationConfirm, "ActivationConfirm"),
+            (Cot::Deactivation, "Deactivation"),
+            (Cot::DeactivationConfirm, "DeactivationConfirm"),
+            (Cot::ActivationTermination, "ActivationTermination"),
+            (Cot::UnknownTypeId, "UnknownTypeId"),
+            (Cot::UnknownCot, "UnknownCot"),
+            (Cot::UnknownCommonAddress, "UnknownCommonAddress"),
+            (Cot::UnknownIoa, "UnknownIoa"),
+        ];
+
+        for (cot, expected) in test_cases {
+            assert_eq!(cot.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_cot_interrogation_groups() {
+        // Test all interrogation group responses
+        let groups = [
+            (Cot::InterrogatedByStation, 20),
+            (Cot::InterrogatedByGroup1, 21),
+            (Cot::InterrogatedByGroup2, 22),
+            (Cot::InterrogatedByGroup3, 23),
+            (Cot::InterrogatedByGroup4, 24),
+            (Cot::InterrogatedByGroup5, 25),
+            (Cot::InterrogatedByGroup6, 26),
+            (Cot::InterrogatedByGroup7, 27),
+            (Cot::InterrogatedByGroup8, 28),
+            (Cot::InterrogatedByGroup9, 29),
+            (Cot::InterrogatedByGroup10, 30),
+            (Cot::InterrogatedByGroup11, 31),
+            (Cot::InterrogatedByGroup12, 32),
+            (Cot::InterrogatedByGroup13, 33),
+            (Cot::InterrogatedByGroup14, 34),
+            (Cot::InterrogatedByGroup15, 35),
+            (Cot::InterrogatedByGroup16, 36),
+        ];
+
+        for (cot, expected_value) in groups {
+            assert_eq!(cot.as_u8(), expected_value);
+            assert!(cot.is_interrogation_response());
+        }
+    }
+
+    #[test]
+    fn test_cot_positive_cases() {
+        assert!(Cot::ActivationConfirm.is_positive());
+        assert!(Cot::DeactivationConfirm.is_positive());
+        assert!(Cot::ActivationTermination.is_positive());
+
+        // Non-positive COTs
+        assert!(!Cot::Activation.is_positive());
+        assert!(!Cot::Deactivation.is_positive());
+        assert!(!Cot::Spontaneous.is_positive());
+    }
+
+    #[test]
+    fn test_cot_negative_cases() {
+        assert!(Cot::UnknownTypeId.is_negative());
+        assert!(Cot::UnknownCot.is_negative());
+        assert!(Cot::UnknownCommonAddress.is_negative());
+        assert!(Cot::UnknownIoa.is_negative());
+
+        // Non-negative COTs
+        assert!(!Cot::Activation.is_negative());
+        assert!(!Cot::ActivationConfirm.is_negative());
+        assert!(!Cot::Spontaneous.is_negative());
+    }
 }

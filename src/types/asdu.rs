@@ -668,4 +668,311 @@ mod tests {
         assert!(parsed.summer_time);
         assert!(!parsed.invalid);
     }
+
+    // ============ Additional ASDU Tests ============
+
+    #[test]
+    fn test_vsq_boundary_values() {
+        // Test VSQ with count = 0
+        let vsq = Vsq::new(0, false);
+        assert_eq!(vsq.count, 0);
+        assert_eq!(vsq.as_u8(), 0);
+
+        // Test VSQ with count = 127 (max)
+        let vsq = Vsq::new(127, false);
+        assert_eq!(vsq.count, 127);
+        assert_eq!(vsq.as_u8(), 127);
+
+        // Test VSQ with count = 127 and sequence
+        let vsq = Vsq::new(127, true);
+        assert_eq!(vsq.as_u8(), 0xFF);
+    }
+
+    #[test]
+    fn test_vsq_count_mask() {
+        // Count should be masked to 7 bits
+        let vsq = Vsq::from_u8(0xFF); // All bits set
+        assert_eq!(vsq.count, 127); // Only lower 7 bits
+        assert!(vsq.sequence); // Bit 7 set
+    }
+
+    #[test]
+    fn test_ioa_boundary_values() {
+        // Test IOA = 0
+        let ioa = Ioa::new(0);
+        assert_eq!(ioa.value(), 0);
+        assert_eq!(ioa.to_bytes(), [0, 0, 0]);
+
+        // Test IOA = max (24-bit: 0xFFFFFF)
+        let ioa = Ioa::new(0xFFFFFF);
+        assert_eq!(ioa.value(), 0xFFFFFF);
+        assert_eq!(ioa.to_bytes(), [0xFF, 0xFF, 0xFF]);
+
+        // Test IOA with value > 24 bits (should mask)
+        let ioa = Ioa::new(0x01FFFFFF);
+        assert_eq!(ioa.value(), 0xFFFFFF); // Masked to 24 bits
+    }
+
+    #[test]
+    fn test_ioa_from_bytes_too_short() {
+        let result = Ioa::from_bytes(&[0x00, 0x00]);
+        assert!(result.is_err());
+
+        let result = Ioa::from_bytes(&[0x00]);
+        assert!(result.is_err());
+
+        let result = Ioa::from_bytes(&[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ioa_display() {
+        let ioa = Ioa::new(12345);
+        assert_eq!(ioa.to_string(), "12345");
+    }
+
+    #[test]
+    fn test_single_point_roundtrip() {
+        for siq in [0x00, 0x01, 0x10, 0x20, 0x40, 0x80, 0x91, 0xFF] {
+            let sp = SinglePoint::from_u8(siq);
+            let encoded = sp.as_u8();
+            // Value bit and quality bits should be preserved
+            assert_eq!(encoded & 0xF1, siq & 0xF1);
+        }
+    }
+
+    #[test]
+    fn test_single_point_value_and_quality() {
+        // ON with good quality
+        let sp = SinglePoint::from_u8(0x01);
+        assert!(sp.value);
+        assert!(sp.quality.is_good());
+
+        // OFF with invalid quality
+        let sp = SinglePoint::from_u8(0x80);
+        assert!(!sp.value);
+        assert!(sp.quality.invalid);
+
+        // ON with blocked and substituted
+        let sp = SinglePoint::from_u8(0x31);
+        assert!(sp.value);
+        assert!(sp.quality.blocked);
+        assert!(sp.quality.substituted);
+    }
+
+    #[test]
+    fn test_double_point_value_all_cases() {
+        assert_eq!(DoublePointValue::from_u8(0x00), DoublePointValue::Indeterminate);
+        assert_eq!(DoublePointValue::from_u8(0x01), DoublePointValue::Off);
+        assert_eq!(DoublePointValue::from_u8(0x02), DoublePointValue::On);
+        assert_eq!(DoublePointValue::from_u8(0x03), DoublePointValue::IndeterminateOrFaulty);
+
+        // Test with upper bits set (should be masked)
+        assert_eq!(DoublePointValue::from_u8(0xFC), DoublePointValue::Indeterminate);
+        assert_eq!(DoublePointValue::from_u8(0xFD), DoublePointValue::Off);
+        assert_eq!(DoublePointValue::from_u8(0xFE), DoublePointValue::On);
+        assert_eq!(DoublePointValue::from_u8(0xFF), DoublePointValue::IndeterminateOrFaulty);
+    }
+
+    #[test]
+    fn test_double_point_with_quality() {
+        let dp = DoublePoint::from_u8(0x82); // ON + invalid
+        assert_eq!(dp.value, DoublePointValue::On);
+        assert!(dp.quality.invalid);
+    }
+
+    #[test]
+    fn test_quality_descriptor_roundtrip() {
+        let test_values = [0x00, 0x10, 0x20, 0x40, 0x80, 0xF0];
+        for val in test_values {
+            let qd = QualityDescriptor::from_siq(val);
+            let encoded = qd.to_siq();
+            assert_eq!(encoded, val & 0xF0); // Only quality bits
+        }
+    }
+
+    #[test]
+    fn test_quality_descriptor_is_good() {
+        assert!(QualityDescriptor::new().is_good());
+        assert!(!QualityDescriptor::invalid().is_good());
+
+        let qd = QualityDescriptor::from_siq(0x10); // Blocked
+        assert!(!qd.is_good());
+    }
+
+    #[test]
+    fn test_measured_quality_all_flags() {
+        let mq = MeasuredQuality::from_u8(0xF1); // OV + BL + SB + NT + IV
+        assert!(mq.overflow);
+        assert!(mq.blocked);
+        assert!(mq.substituted);
+        assert!(mq.not_topical);
+        assert!(mq.invalid);
+
+        let encoded = mq.as_u8();
+        assert_eq!(encoded, 0xF1);
+    }
+
+    #[test]
+    fn test_measured_quality_individual_flags() {
+        // Test each flag individually
+        assert!(MeasuredQuality::from_u8(0x01).overflow);
+        assert!(MeasuredQuality::from_u8(0x10).blocked);
+        assert!(MeasuredQuality::from_u8(0x20).substituted);
+        assert!(MeasuredQuality::from_u8(0x40).not_topical);
+        assert!(MeasuredQuality::from_u8(0x80).invalid);
+    }
+
+    #[test]
+    fn test_measured_value_creation() {
+        let mv = MeasuredValue::new(123.456);
+        assert!((mv.value - 123.456).abs() < 0.001);
+        assert!(mv.quality.is_good());
+
+        let mv = MeasuredValue::invalid(999.0);
+        assert!(mv.quality.invalid);
+    }
+
+    #[test]
+    fn test_cp56time2a_boundary_values() {
+        // Test minimum values
+        let time = Cp56Time2a {
+            milliseconds: 0,
+            minutes: 0,
+            hours: 0,
+            day: 1,
+            day_of_week: 1,
+            month: 1,
+            year: 0,
+            invalid: false,
+            summer_time: false,
+        };
+        let bytes = time.to_bytes();
+        let parsed = Cp56Time2a::from_bytes(&bytes).unwrap();
+        assert_eq!(parsed.milliseconds, 0);
+        assert_eq!(parsed.minutes, 0);
+        assert_eq!(parsed.hours, 0);
+
+        // Test maximum values
+        let time = Cp56Time2a {
+            milliseconds: 59999,
+            minutes: 59,
+            hours: 23,
+            day: 31,
+            day_of_week: 7,
+            month: 12,
+            year: 99,
+            invalid: true,
+            summer_time: true,
+        };
+        let bytes = time.to_bytes();
+        let parsed = Cp56Time2a::from_bytes(&bytes).unwrap();
+        assert_eq!(parsed.milliseconds, 59999);
+        assert_eq!(parsed.minutes, 59);
+        assert_eq!(parsed.hours, 23);
+        assert!(parsed.invalid);
+        assert!(parsed.summer_time);
+    }
+
+    #[test]
+    fn test_cp56time2a_too_short() {
+        let result = Cp56Time2a::from_bytes(&[0, 0, 0, 0, 0, 0]); // 6 bytes, need 7
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_asdu_header_with_flags() {
+        let mut header = AsduHeader::new(TypeId::MeasuredFloat, 5, Cot::Spontaneous, 1);
+        header.test = true;
+        header.negative = true;
+        header.originator = 42;
+
+        let mut buf = BytesMut::new();
+        header.encode(&mut buf);
+
+        let (parsed, len) = AsduHeader::parse(&buf).unwrap();
+        assert_eq!(len, 6);
+        assert_eq!(parsed.type_id, TypeId::MeasuredFloat);
+        assert_eq!(parsed.vsq.count, 5);
+        assert_eq!(parsed.cot, Cot::Spontaneous);
+        assert!(parsed.test);
+        assert!(parsed.negative);
+        assert_eq!(parsed.originator, 42);
+        assert_eq!(parsed.common_address, 1);
+    }
+
+    #[test]
+    fn test_asdu_header_parse_too_short() {
+        let data = [0x0D, 0x05, 0x03, 0x00, 0x01]; // Only 5 bytes
+        let result = AsduHeader::parse(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_asdu_encoded_len() {
+        let mut asdu = Asdu::new(AsduHeader::new(TypeId::SinglePoint, 1, Cot::Spontaneous, 1));
+        assert_eq!(asdu.encoded_len(), 6); // Header only
+
+        // Add an information object
+        asdu.objects.push(InformationObject {
+            ioa: Ioa::new(100),
+            data: Bytes::from_static(&[0x01]),
+        });
+        assert_eq!(asdu.encoded_len(), 6 + 3 + 1); // Header + IOA + data
+
+        // Add another
+        asdu.objects.push(InformationObject {
+            ioa: Ioa::new(200),
+            data: Bytes::from_static(&[0x00]),
+        });
+        assert_eq!(asdu.encoded_len(), 6 + 4 + 4); // Header + 2*(IOA + data)
+    }
+
+    #[test]
+    fn test_asdu_interrogation_command() {
+        let asdu = Asdu::interrogation_command(1, 20);
+        assert_eq!(asdu.header.type_id, TypeId::InterrogationCommand);
+        assert_eq!(asdu.header.cot, Cot::Activation);
+        assert_eq!(asdu.header.common_address, 1);
+        assert_eq!(asdu.objects.len(), 1);
+        assert_eq!(asdu.objects[0].ioa.value(), 0);
+        assert_eq!(&asdu.objects[0].data[..], &[20]);
+    }
+
+    #[test]
+    fn test_asdu_clock_sync_command() {
+        let time = Cp56Time2a {
+            milliseconds: 30000,
+            minutes: 30,
+            hours: 12,
+            day: 15,
+            day_of_week: 3,
+            month: 6,
+            year: 24,
+            invalid: false,
+            summer_time: false,
+        };
+        let asdu = Asdu::clock_sync_command(1, time);
+        assert_eq!(asdu.header.type_id, TypeId::ClockSync);
+        assert_eq!(asdu.header.cot, Cot::Activation);
+        assert_eq!(asdu.objects.len(), 1);
+        assert_eq!(asdu.objects[0].data.len(), 7);
+    }
+
+    #[test]
+    fn test_asdu_encode_decode_roundtrip() {
+        let asdu = Asdu::interrogation_command(100, 20);
+        let encoded = asdu.encode();
+
+        let parsed = Asdu::parse(&encoded).unwrap();
+        assert_eq!(parsed.header.type_id, TypeId::InterrogationCommand);
+        assert_eq!(parsed.header.common_address, 100);
+    }
+
+    #[test]
+    fn test_information_object_creation() {
+        let io = InformationObject::new(Ioa::new(12345), Bytes::from_static(&[0x01, 0x02, 0x03]));
+        assert_eq!(io.ioa.value(), 12345);
+        assert_eq!(io.data.len(), 3);
+    }
 }
