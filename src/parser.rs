@@ -27,7 +27,7 @@ pub fn parse_asdu(asdu: &Asdu) -> Result<Vec<DataPoint>> {
     let sequence = asdu.header.vsq.sequence;
 
     if data.is_empty() && count > 0 {
-        return Err(Iec104Error::invalid_asdu("Empty data for non-zero count"));
+        return Err(Iec104Error::invalid_asdu_static("Empty data for non-zero count"));
     }
 
     match type_id {
@@ -108,7 +108,7 @@ fn parse_single_point(
 
     // First IOA (always present)
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     let mut offset = 3;
@@ -117,22 +117,20 @@ fn parse_single_point(
         // Get IOA
         let ioa = if sequence {
             first_ioa + i as u32
-        } else {
-            if i > 0 {
-                if offset + 3 > data.len() {
-                    return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
-                }
-                let ioa = parse_ioa(&data[offset..offset + 3])?;
-                offset += 3;
-                ioa
-            } else {
-                first_ioa
+        } else if i > 0 {
+            if offset + 3 > data.len() {
+                return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
             }
+            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            offset += 3;
+            ioa
+        } else {
+            first_ioa
         };
 
         // Check data length
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // Parse SIQ (Single-point Information with Quality)
@@ -170,7 +168,7 @@ fn parse_single_point_time24(data: &[u8], count: usize, sequence: bool) -> Resul
     let element_size = 4;
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -180,7 +178,7 @@ fn parse_single_point_time24(data: &[u8], count: usize, sequence: bool) -> Resul
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -190,7 +188,7 @@ fn parse_single_point_time24(data: &[u8], count: usize, sequence: bool) -> Resul
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         let siq = data[offset];
@@ -222,7 +220,7 @@ fn parse_double_point(
     let element_size = if with_time { 1 + 7 } else { 1 };
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -232,7 +230,7 @@ fn parse_double_point(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -242,7 +240,7 @@ fn parse_double_point(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // Parse DIQ (Double-point Information with Quality)
@@ -284,7 +282,7 @@ fn parse_double_point_time24(data: &[u8], count: usize, sequence: bool) -> Resul
     let element_size = 4; // DIQ (1) + CP24Time2a (3)
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -294,7 +292,7 @@ fn parse_double_point_time24(data: &[u8], count: usize, sequence: bool) -> Resul
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -304,7 +302,7 @@ fn parse_double_point_time24(data: &[u8], count: usize, sequence: bool) -> Resul
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         let diq = data[offset];
@@ -342,7 +340,7 @@ fn parse_step_position(
     let element_size = 2; // VTI (1) + QDS (1)
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -352,7 +350,7 @@ fn parse_step_position(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -362,7 +360,7 @@ fn parse_step_position(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // VTI: Value with Transient Indicator
@@ -400,7 +398,7 @@ fn parse_bitstring(
     let element_size = 5; // BSI (4) + QDS (1)
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -410,7 +408,7 @@ fn parse_bitstring(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -420,7 +418,7 @@ fn parse_bitstring(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // BSI: Bitstring of 32 bit
@@ -460,7 +458,7 @@ fn parse_measured_normalized(
     let element_size = 3; // NVA (2) + QDS (1)
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -470,7 +468,7 @@ fn parse_measured_normalized(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -480,7 +478,7 @@ fn parse_measured_normalized(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // NVA: Normalized Value (16-bit signed, -1.0 to ~+1.0)
@@ -516,7 +514,7 @@ fn parse_measured_scaled(
     let element_size = 3; // SVA (2) + QDS (1)
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -526,7 +524,7 @@ fn parse_measured_scaled(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -536,7 +534,7 @@ fn parse_measured_scaled(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // SVA: Scaled Value
@@ -571,7 +569,7 @@ fn parse_measured_float(
     let element_size = if with_time { 5 + 7 } else { 5 }; // IEEE float (4) + QDS (1) + optional CP56Time2a
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -581,7 +579,7 @@ fn parse_measured_float(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -591,7 +589,7 @@ fn parse_measured_float(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // IEEE 754 short floating point
@@ -639,7 +637,7 @@ fn parse_integrated_totals(
     let element_size = 5; // BCR (4) + sequence/flags (1)
 
     if data.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
+        return Err(Iec104Error::invalid_asdu_static("Data too short for IOA"));
     }
     let first_ioa = parse_ioa(&data[0..3])?;
     offset = 3;
@@ -649,7 +647,7 @@ fn parse_integrated_totals(
             first_ioa + i as u32
         } else if i > 0 {
             if offset + 3 > data.len() {
-                return Err(Iec104Error::invalid_asdu("Data too short"));
+                return Err(Iec104Error::invalid_asdu_static("Data too short"));
             }
             let ioa = parse_ioa(&data[offset..offset + 3])?;
             offset += 3;
@@ -659,7 +657,7 @@ fn parse_integrated_totals(
         };
 
         if offset + element_size > data.len() {
-            return Err(Iec104Error::invalid_asdu("Data too short for element"));
+            return Err(Iec104Error::invalid_asdu_static("Data too short for element"));
         }
 
         // BCR: Binary Counter Reading
@@ -702,11 +700,18 @@ fn parse_integrated_totals(
 }
 
 /// Parse IOA from 3 bytes (little-endian).
+#[inline(always)]
 fn parse_ioa(bytes: &[u8]) -> Result<u32> {
     if bytes.len() < 3 {
-        return Err(Iec104Error::invalid_asdu("IOA too short"));
+        return Err(Iec104Error::invalid_asdu_static("IOA too short"));
     }
-    Ok(bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16))
+    Ok(read_ioa_le(bytes))
+}
+
+/// Read IOA as little-endian u24 (assumes bytes.len() >= 3).
+#[inline(always)]
+fn read_ioa_le(bytes: &[u8]) -> u32 {
+    bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16)
 }
 
 #[cfg(test)]
@@ -882,5 +887,389 @@ mod tests {
         assert!(!points[0].is_good());
         assert!(points[0].quality.invalid);
         assert!(points[0].quality.overflow);
+    }
+
+    // ============ Additional Tests ============
+
+    #[test]
+    fn test_parse_empty_data_zero_count() {
+        // Empty data with count=0 - current behavior requires IOA
+        // This test verifies that commands with empty data return Ok([])
+        let asdu = make_asdu(TypeId::InterrogationCommand, 0, false, &[]);
+        let points = parse_asdu(&asdu).unwrap();
+        assert!(points.is_empty());
+    }
+
+    #[test]
+    fn test_parse_empty_data_nonzero_count() {
+        // Empty data with count>0 should fail
+        let asdu = make_asdu(TypeId::SinglePoint, 1, false, &[]);
+        let result = parse_asdu(&asdu);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_single_point_time56() {
+        // IOA=500, SIQ=0x01 (ON), CP56Time2a (7 bytes)
+        let mut data = vec![0xF4, 0x01, 0x00]; // IOA=500
+        data.push(0x01); // SIQ: ON
+        // CP56Time2a: 2024-06-15 12:30:30.000
+        data.extend_from_slice(&[0x30, 0x75, 0x1E, 0x8C, 0x6F, 0x06, 0x18]);
+
+        let asdu = make_asdu(TypeId::SinglePointTime56, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 500);
+        assert_eq!(points[0].value, DataValue::Single(true));
+        assert!(points[0].timestamp.is_some());
+    }
+
+    #[test]
+    fn test_parse_double_point_all_values() {
+        // Test all 4 double-point values
+        for (diq, expected) in [
+            (0x00, DoublePointValue::Indeterminate),
+            (0x01, DoublePointValue::Off),
+            (0x02, DoublePointValue::On),
+            (0x03, DoublePointValue::IndeterminateOrFaulty),
+        ] {
+            let data = [0x01, 0x00, 0x00, diq]; // IOA=1
+            let asdu = make_asdu(TypeId::DoublePoint, 1, false, &data);
+            let points = parse_asdu(&asdu).unwrap();
+            assert_eq!(points[0].value, DataValue::Double(expected));
+        }
+    }
+
+    #[test]
+    fn test_parse_double_point_time56() {
+        // IOA=600, DIQ=0x02 (ON), CP56Time2a
+        let mut data = vec![0x58, 0x02, 0x00]; // IOA=600
+        data.push(0x02); // DIQ: ON
+        data.extend_from_slice(&[0x30, 0x75, 0x1E, 0x8C, 0x6F, 0x06, 0x18]);
+
+        let asdu = make_asdu(TypeId::DoublePointTime56, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 600);
+        assert_eq!(points[0].value, DataValue::Double(DoublePointValue::On));
+        assert!(points[0].timestamp.is_some());
+    }
+
+    #[test]
+    fn test_parse_single_point_time24() {
+        // IOA=700, SIQ=0x01 (ON), CP24Time2a (3 bytes - we skip it)
+        let data = [
+            0xBC, 0x02, 0x00, // IOA=700
+            0x01, // SIQ: ON
+            0x00, 0x00, 0x00, // CP24Time2a (ignored)
+        ];
+        let asdu = make_asdu(TypeId::SinglePointTime24, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 700);
+        assert_eq!(points[0].value, DataValue::Single(true));
+        assert!(points[0].timestamp.is_none()); // CP24Time2a not parsed
+    }
+
+    #[test]
+    fn test_parse_double_point_time24() {
+        // IOA=800, DIQ=0x01 (OFF), CP24Time2a (3 bytes)
+        let data = [
+            0x20, 0x03, 0x00, // IOA=800
+            0x01, // DIQ: OFF
+            0x00, 0x00, 0x00, // CP24Time2a (ignored)
+        ];
+        let asdu = make_asdu(TypeId::DoublePointTime24, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 800);
+        assert_eq!(points[0].value, DataValue::Double(DoublePointValue::Off));
+    }
+
+    #[test]
+    fn test_parse_step_position() {
+        // IOA=900, VTI=0x60 (value=-4, transient=false), QDS=0x00
+        let data = [
+            0x84, 0x03, 0x00, // IOA=900
+            0x3C, // VTI: 60 - 64 = -4
+            0x00, // QDS
+        ];
+        let asdu = make_asdu(TypeId::StepPosition, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 900);
+        assert_eq!(points[0].value, DataValue::StepPosition(-4));
+    }
+
+    #[test]
+    fn test_parse_step_position_range() {
+        // Test min/max step position values
+        // VTI=0 means value=-64, VTI=127 means value=+63
+        for (vti, expected) in [(0x00, -64), (0x40, 0), (0x7F, 63)] {
+            let data = [0x01, 0x00, 0x00, vti, 0x00];
+            let asdu = make_asdu(TypeId::StepPosition, 1, false, &data);
+            let points = parse_asdu(&asdu).unwrap();
+            assert_eq!(points[0].value, DataValue::StepPosition(expected));
+        }
+    }
+
+    #[test]
+    fn test_parse_bitstring() {
+        // IOA=1000, BSI=0xDEADBEEF, QDS=0x00
+        let data = [
+            0xE8, 0x03, 0x00, // IOA=1000
+            0xEF, 0xBE, 0xAD, 0xDE, // BSI (little-endian)
+            0x00, // QDS
+        ];
+        let asdu = make_asdu(TypeId::Bitstring32, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 1000);
+        assert_eq!(points[0].value, DataValue::Bitstring(0xDEADBEEF));
+    }
+
+    #[test]
+    fn test_parse_measured_normalized_boundary() {
+        // Test boundary values: -1.0, 0.0, ~+1.0
+        for (raw, expected_approx) in [
+            ([0x00, 0x80], -1.0), // -32768 / 32768 = -1.0
+            ([0x00, 0x00], 0.0),  // 0 / 32768 = 0.0
+            ([0xFF, 0x7F], 0.999969), // 32767 / 32768 ≈ 1.0
+        ] {
+            let data = [0x01, 0x00, 0x00, raw[0], raw[1], 0x00];
+            let asdu = make_asdu(TypeId::MeasuredNormalized, 1, false, &data);
+            let points = parse_asdu(&asdu).unwrap();
+            if let DataValue::Normalized(v) = points[0].value {
+                assert!((v - expected_approx).abs() < 0.001);
+            } else {
+                panic!("Expected Normalized value");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_measured_scaled_boundary() {
+        // Test boundary values: i16::MIN, 0, i16::MAX
+        for (raw, expected) in [
+            ([0x00, 0x80], i16::MIN), // -32768
+            ([0x00, 0x00], 0i16),
+            ([0xFF, 0x7F], i16::MAX), // 32767
+        ] {
+            let data = [0x01, 0x00, 0x00, raw[0], raw[1], 0x00];
+            let asdu = make_asdu(TypeId::MeasuredScaled, 1, false, &data);
+            let points = parse_asdu(&asdu).unwrap();
+            assert_eq!(points[0].value, DataValue::Scaled(expected));
+        }
+    }
+
+    #[test]
+    fn test_parse_measured_float_time56() {
+        // IOA=1100, value=100.5f32, QDS=0x00, CP56Time2a
+        let value_bytes = 100.5f32.to_le_bytes();
+        let mut data = vec![0x4C, 0x04, 0x00]; // IOA=1100
+        data.extend_from_slice(&value_bytes);
+        data.push(0x00); // QDS
+        data.extend_from_slice(&[0x30, 0x75, 0x1E, 0x8C, 0x6F, 0x06, 0x18]); // CP56Time2a
+
+        let asdu = make_asdu(TypeId::MeasuredFloatTime56, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].ioa, 1100);
+        if let DataValue::Float(v) = points[0].value {
+            assert!((v - 100.5).abs() < 0.001);
+        } else {
+            panic!("Expected Float value");
+        }
+        assert!(points[0].timestamp.is_some());
+    }
+
+    #[test]
+    fn test_parse_integrated_totals_with_flags() {
+        // Test with carry, adjusted, and invalid flags
+        let data = [
+            0x01, 0x00, 0x00, // IOA=1
+            0x01, 0x00, 0x00, 0x00, // BCR=1
+            0xE5, // seq=5, carry=true, adjusted=true, invalid=true
+        ];
+        let asdu = make_asdu(TypeId::IntegratedTotals, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        if let DataValue::BinaryCounter {
+            value,
+            sequence,
+            carry,
+            adjusted,
+            invalid,
+        } = points[0].value
+        {
+            assert_eq!(value, 1);
+            assert_eq!(sequence, 5);
+            assert!(carry);
+            assert!(adjusted);
+            assert!(invalid);
+        } else {
+            panic!("Expected BinaryCounter value");
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_non_sequential_ioas() {
+        // Multiple points with different IOAs (non-sequential)
+        // IOA1=100, IOA2=200, IOA3=300
+        let data = [
+            0x64, 0x00, 0x00, 0x01, // IOA=100, SIQ=ON
+            0xC8, 0x00, 0x00, 0x00, // IOA=200, SIQ=OFF
+            0x2C, 0x01, 0x00, 0x01, // IOA=300, SIQ=ON
+        ];
+        let asdu = make_asdu(TypeId::SinglePoint, 3, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[0].ioa, 100);
+        assert_eq!(points[1].ioa, 200);
+        assert_eq!(points[2].ioa, 300);
+        assert_eq!(points[0].value, DataValue::Single(true));
+        assert_eq!(points[1].value, DataValue::Single(false));
+        assert_eq!(points[2].value, DataValue::Single(true));
+    }
+
+    #[test]
+    fn test_parse_quality_all_flags() {
+        // Test all quality flags: OV|BL|SB|NT|IV = 0xF1
+        let value_bytes = 0.0f32.to_le_bytes();
+        let mut data = vec![0x01, 0x00, 0x00]; // IOA=1
+        data.extend_from_slice(&value_bytes);
+        data.push(0xF1); // QDS: all flags except reserved bits
+
+        let asdu = make_asdu(TypeId::MeasuredFloat, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        let q = &points[0].quality;
+        assert!(q.overflow);
+        assert!(q.blocked);
+        assert!(q.substituted);
+        assert!(q.not_topical);
+        assert!(q.invalid);
+    }
+
+    #[test]
+    fn test_parse_command_types_return_empty() {
+        // Command types should return empty Vec
+        for type_id in [
+            TypeId::SingleCommand,
+            TypeId::DoubleCommand,
+            TypeId::RegulatingStep,
+            TypeId::SetpointNormalized,
+            TypeId::SetpointScaled,
+            TypeId::SetpointFloat,
+            TypeId::InterrogationCommand,
+            TypeId::CounterInterrogation,
+            TypeId::ReadCommand,
+            TypeId::ClockSync,
+            TypeId::TestCommand,
+            TypeId::ResetProcess,
+        ] {
+            let asdu = make_asdu(type_id, 1, false, &[0x00, 0x00, 0x00, 0x00]);
+            let points = parse_asdu(&asdu).unwrap();
+            assert!(points.is_empty(), "Type {:?} should return empty", type_id);
+        }
+    }
+
+    #[test]
+    fn test_parse_data_too_short_for_element() {
+        // Data has IOA but not enough for element
+        let data = [0x01, 0x00, 0x00]; // IOA only, no SIQ
+        let asdu = make_asdu(TypeId::SinglePoint, 1, false, &data);
+        let result = parse_asdu(&asdu);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_ioa_too_short() {
+        // Data too short even for IOA
+        let data = [0x01, 0x00]; // Only 2 bytes
+        let asdu = make_asdu(TypeId::SinglePoint, 1, false, &data);
+        let result = parse_asdu(&asdu);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_large_ioa_value() {
+        // Test maximum IOA value (24-bit: 0xFFFFFF = 16777215)
+        let data = [0xFF, 0xFF, 0xFF, 0x01]; // IOA=16777215, SIQ=ON
+        let asdu = make_asdu(TypeId::SinglePoint, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points[0].ioa, 0xFFFFFF);
+    }
+
+    #[test]
+    fn test_parse_measured_float_nan() {
+        // Test NaN value
+        let nan_bytes = f32::NAN.to_le_bytes();
+        let mut data = vec![0x01, 0x00, 0x00];
+        data.extend_from_slice(&nan_bytes);
+        data.push(0x00);
+
+        let asdu = make_asdu(TypeId::MeasuredFloat, 1, false, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        if let DataValue::Float(v) = points[0].value {
+            assert!(v.is_nan());
+        } else {
+            panic!("Expected Float value");
+        }
+    }
+
+    #[test]
+    fn test_parse_measured_float_infinity() {
+        // Test infinity values
+        for inf in [f32::INFINITY, f32::NEG_INFINITY] {
+            let inf_bytes = inf.to_le_bytes();
+            let mut data = vec![0x01, 0x00, 0x00];
+            data.extend_from_slice(&inf_bytes);
+            data.push(0x00);
+
+            let asdu = make_asdu(TypeId::MeasuredFloat, 1, false, &data);
+            let points = parse_asdu(&asdu).unwrap();
+
+            if let DataValue::Float(v) = points[0].value {
+                assert!(v.is_infinite());
+                assert_eq!(v.is_sign_positive(), inf.is_sign_positive());
+            } else {
+                panic!("Expected Float value");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_sequence_float_multiple() {
+        // Multiple float values in sequence mode
+        let mut data = vec![0x64, 0x00, 0x00]; // First IOA=100
+        for i in 0..5 {
+            let value = (i as f32) * 10.0;
+            data.extend_from_slice(&value.to_le_bytes());
+            data.push(0x00); // QDS
+        }
+
+        let asdu = make_asdu(TypeId::MeasuredFloat, 5, true, &data);
+        let points = parse_asdu(&asdu).unwrap();
+
+        assert_eq!(points.len(), 5);
+        for i in 0..5 {
+            assert_eq!(points[i].ioa, 100 + i as u32);
+            if let DataValue::Float(v) = points[i].value {
+                assert!((v - (i as f32) * 10.0).abs() < 0.001);
+            } else {
+                panic!("Expected Float value");
+            }
+        }
     }
 }

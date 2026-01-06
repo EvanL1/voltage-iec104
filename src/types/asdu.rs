@@ -20,12 +20,14 @@ pub struct Vsq {
 
 impl Vsq {
     /// Create a new VSQ.
-    pub fn new(count: u8, sequence: bool) -> Self {
+    #[inline]
+    pub const fn new(count: u8, sequence: bool) -> Self {
         Self { count, sequence }
     }
 
     /// Parse VSQ from byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             count: value & 0x7F,
             sequence: (value & 0x80) != 0,
@@ -33,7 +35,8 @@ impl Vsq {
     }
 
     /// Encode VSQ to byte.
-    pub fn as_u8(&self) -> u8 {
+    #[inline]
+    pub const fn as_u8(&self) -> u8 {
         (self.count & 0x7F) | if self.sequence { 0x80 } else { 0 }
     }
 }
@@ -46,20 +49,23 @@ pub struct Ioa(pub u32);
 
 impl Ioa {
     /// Create IOA from u32 (lower 24 bits).
-    pub fn new(value: u32) -> Self {
+    #[inline]
+    pub const fn new(value: u32) -> Self {
         Self(value & 0x00FFFFFF)
     }
 
     /// Parse IOA from 3 bytes (little-endian).
+    #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() < 3 {
-            return Err(Iec104Error::invalid_asdu("IOA too short"));
+            return Err(Iec104Error::invalid_asdu_static("IOA too short"));
         }
         let value = bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16);
         Ok(Self(value))
     }
 
     /// Encode IOA to 3 bytes (little-endian).
+    #[inline]
     pub fn to_bytes(&self) -> [u8; 3] {
         [
             (self.0 & 0xFF) as u8,
@@ -69,6 +75,7 @@ impl Ioa {
     }
 
     /// Get the raw value.
+    #[inline]
     pub fn value(&self) -> u32 {
         self.0
     }
@@ -101,7 +108,8 @@ pub struct AsduHeader {
 
 impl AsduHeader {
     /// Create a new ASDU header.
-    pub fn new(type_id: TypeId, count: u8, cot: Cot, common_address: u16) -> Self {
+    #[inline]
+    pub const fn new(type_id: TypeId, count: u8, cot: Cot, common_address: u16) -> Self {
         Self {
             type_id,
             vsq: Vsq::new(count, false),
@@ -116,9 +124,10 @@ impl AsduHeader {
     /// Parse ASDU header from bytes.
     ///
     /// Returns the header and the number of bytes consumed.
+    #[inline]
     pub fn parse(data: &[u8]) -> Result<(Self, usize)> {
         if data.len() < 6 {
-            return Err(Iec104Error::invalid_asdu("ASDU header too short"));
+            return Err(Iec104Error::invalid_asdu_static("ASDU header too short"));
         }
 
         let type_id = TypeId::from_u8(data[0])?;
@@ -147,6 +156,7 @@ impl AsduHeader {
     }
 
     /// Encode ASDU header to bytes.
+    #[inline]
     pub fn encode(&self, buf: &mut BytesMut) {
         buf.put_u8(self.type_id.as_u8());
         buf.put_u8(self.vsq.as_u8());
@@ -164,7 +174,8 @@ impl AsduHeader {
     }
 
     /// Get the encoded size in bytes.
-    pub fn encoded_size(&self) -> usize {
+    #[inline]
+    pub const fn encoded_size(&self) -> usize {
         6
     }
 }
@@ -180,7 +191,8 @@ pub struct SinglePoint {
 
 impl SinglePoint {
     /// Parse from byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             value: (value & 0x01) != 0,
             quality: QualityDescriptor::from_siq(value),
@@ -188,7 +200,8 @@ impl SinglePoint {
     }
 
     /// Encode to byte.
-    pub fn as_u8(&self) -> u8 {
+    #[inline]
+    pub const fn as_u8(&self) -> u8 {
         let mut result = if self.value { 0x01 } else { 0x00 };
         result |= self.quality.to_siq();
         result
@@ -210,13 +223,14 @@ pub enum DoublePointValue {
 
 impl DoublePointValue {
     /// Parse from byte (lower 2 bits).
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         match value & 0x03 {
             0 => Self::Indeterminate,
             1 => Self::Off,
             2 => Self::On,
             3 => Self::IndeterminateOrFaulty,
-            _ => unreachable!(),
+            _ => Self::Indeterminate, // Impossible case, but needed for const fn
         }
     }
 }
@@ -232,7 +246,8 @@ pub struct DoublePoint {
 
 impl DoublePoint {
     /// Parse from byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             value: DoublePointValue::from_u8(value),
             quality: QualityDescriptor::from_diq(value),
@@ -255,20 +270,30 @@ pub struct QualityDescriptor {
 
 impl QualityDescriptor {
     /// Create a new quality descriptor with all flags false.
-    pub fn new() -> Self {
-        Self::default()
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            blocked: false,
+            substituted: false,
+            not_topical: false,
+            invalid: false,
+        }
     }
 
     /// Create a quality descriptor indicating invalid data.
-    pub fn invalid() -> Self {
+    #[inline]
+    pub const fn invalid() -> Self {
         Self {
+            blocked: false,
+            substituted: false,
+            not_topical: false,
             invalid: true,
-            ..Default::default()
         }
     }
 
     /// Parse from SIQ byte (single-point information with quality).
-    pub fn from_siq(value: u8) -> Self {
+    #[inline]
+    pub const fn from_siq(value: u8) -> Self {
         Self {
             blocked: (value & 0x10) != 0,
             substituted: (value & 0x20) != 0,
@@ -278,7 +303,8 @@ impl QualityDescriptor {
     }
 
     /// Parse from DIQ byte (double-point information with quality).
-    pub fn from_diq(value: u8) -> Self {
+    #[inline]
+    pub const fn from_diq(value: u8) -> Self {
         Self {
             blocked: (value & 0x10) != 0,
             substituted: (value & 0x20) != 0,
@@ -288,7 +314,8 @@ impl QualityDescriptor {
     }
 
     /// Encode to SIQ byte (without value bits).
-    pub fn to_siq(&self) -> u8 {
+    #[inline]
+    pub const fn to_siq(&self) -> u8 {
         let mut result = 0u8;
         if self.blocked {
             result |= 0x10;
@@ -306,7 +333,8 @@ impl QualityDescriptor {
     }
 
     /// Check if the quality is good (all flags false).
-    pub fn is_good(&self) -> bool {
+    #[inline]
+    pub const fn is_good(&self) -> bool {
         !self.blocked && !self.substituted && !self.not_topical && !self.invalid
     }
 }
@@ -328,12 +356,20 @@ pub struct MeasuredQuality {
 
 impl MeasuredQuality {
     /// Create a new quality descriptor with all flags false.
-    pub fn new() -> Self {
-        Self::default()
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            overflow: false,
+            blocked: false,
+            substituted: false,
+            not_topical: false,
+            invalid: false,
+        }
     }
 
     /// Parse from QDS byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             overflow: (value & 0x01) != 0,
             blocked: (value & 0x10) != 0,
@@ -344,7 +380,8 @@ impl MeasuredQuality {
     }
 
     /// Encode to QDS byte.
-    pub fn as_u8(&self) -> u8 {
+    #[inline]
+    pub const fn as_u8(&self) -> u8 {
         let mut result = 0u8;
         if self.overflow {
             result |= 0x01;
@@ -365,7 +402,8 @@ impl MeasuredQuality {
     }
 
     /// Check if the quality is good (all flags false).
-    pub fn is_good(&self) -> bool {
+    #[inline]
+    pub const fn is_good(&self) -> bool {
         !self.overflow && !self.blocked && !self.substituted && !self.not_topical && !self.invalid
     }
 }
@@ -381,7 +419,8 @@ pub struct MeasuredValue {
 
 impl MeasuredValue {
     /// Create a new measured value.
-    pub fn new(value: f32) -> Self {
+    #[inline]
+    pub const fn new(value: f32) -> Self {
         Self {
             value,
             quality: MeasuredQuality::new(),
@@ -389,12 +428,16 @@ impl MeasuredValue {
     }
 
     /// Create a measured value with invalid quality.
-    pub fn invalid(value: f32) -> Self {
+    #[inline]
+    pub const fn invalid(value: f32) -> Self {
         Self {
             value,
             quality: MeasuredQuality {
+                overflow: false,
+                blocked: false,
+                substituted: false,
+                not_topical: false,
                 invalid: true,
-                ..Default::default()
             },
         }
     }
@@ -425,9 +468,10 @@ pub struct Cp56Time2a {
 
 impl Cp56Time2a {
     /// Parse from 7 bytes.
+    #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() < 7 {
-            return Err(Iec104Error::invalid_asdu("CP56Time2a too short"));
+            return Err(Iec104Error::invalid_asdu_static("CP56Time2a too short"));
         }
 
         let milliseconds = bytes[0] as u16 | ((bytes[1] as u16) << 8);
@@ -454,7 +498,8 @@ impl Cp56Time2a {
     }
 
     /// Encode to 7 bytes.
-    pub fn to_bytes(&self) -> [u8; 7] {
+    #[inline]
+    pub const fn to_bytes(&self) -> [u8; 7] {
         let mut result = [0u8; 7];
         result[0] = (self.milliseconds & 0xFF) as u8;
         result[1] = ((self.milliseconds >> 8) & 0xFF) as u8;
@@ -514,7 +559,7 @@ impl Asdu {
         ));
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(0),
-            data: Bytes::from(vec![qoi]),
+            data: Bytes::copy_from_slice(&[qoi]),
         });
         asdu
     }
@@ -529,7 +574,7 @@ impl Asdu {
         ));
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(0),
-            data: Bytes::from(time.to_bytes().to_vec()),
+            data: Bytes::copy_from_slice(&time.to_bytes()),
         });
         asdu
     }
@@ -548,8 +593,15 @@ impl Asdu {
 
     /// Encode ASDU to bytes.
     pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        self.header.encode(&mut buf);
+        let mut buf = BytesMut::with_capacity(self.encoded_len());
+        self.encode_to(&mut buf);
+        buf
+    }
+
+    /// Encode ASDU directly into the provided buffer (zero-copy).
+    #[inline]
+    pub fn encode_to(&self, buf: &mut BytesMut) {
+        self.header.encode(buf);
 
         // Encode information objects
         for obj in &self.objects {
@@ -561,8 +613,19 @@ impl Asdu {
         if self.objects.is_empty() && !self.raw_data.is_empty() {
             buf.put_slice(&self.raw_data);
         }
+    }
 
-        buf
+    /// Calculate the encoded length of this ASDU.
+    #[inline]
+    pub fn encoded_len(&self) -> usize {
+        let mut len = self.header.encoded_size();
+        for obj in &self.objects {
+            len += 3 + obj.data.len(); // IOA (3 bytes) + data
+        }
+        if self.objects.is_empty() {
+            len += self.raw_data.len();
+        }
+        len
     }
 }
 
@@ -642,5 +705,312 @@ mod tests {
         assert_eq!(parsed.year, 24);
         assert!(parsed.summer_time);
         assert!(!parsed.invalid);
+    }
+
+    // ============ Additional ASDU Tests ============
+
+    #[test]
+    fn test_vsq_boundary_values() {
+        // Test VSQ with count = 0
+        let vsq = Vsq::new(0, false);
+        assert_eq!(vsq.count, 0);
+        assert_eq!(vsq.as_u8(), 0);
+
+        // Test VSQ with count = 127 (max)
+        let vsq = Vsq::new(127, false);
+        assert_eq!(vsq.count, 127);
+        assert_eq!(vsq.as_u8(), 127);
+
+        // Test VSQ with count = 127 and sequence
+        let vsq = Vsq::new(127, true);
+        assert_eq!(vsq.as_u8(), 0xFF);
+    }
+
+    #[test]
+    fn test_vsq_count_mask() {
+        // Count should be masked to 7 bits
+        let vsq = Vsq::from_u8(0xFF); // All bits set
+        assert_eq!(vsq.count, 127); // Only lower 7 bits
+        assert!(vsq.sequence); // Bit 7 set
+    }
+
+    #[test]
+    fn test_ioa_boundary_values() {
+        // Test IOA = 0
+        let ioa = Ioa::new(0);
+        assert_eq!(ioa.value(), 0);
+        assert_eq!(ioa.to_bytes(), [0, 0, 0]);
+
+        // Test IOA = max (24-bit: 0xFFFFFF)
+        let ioa = Ioa::new(0xFFFFFF);
+        assert_eq!(ioa.value(), 0xFFFFFF);
+        assert_eq!(ioa.to_bytes(), [0xFF, 0xFF, 0xFF]);
+
+        // Test IOA with value > 24 bits (should mask)
+        let ioa = Ioa::new(0x01FFFFFF);
+        assert_eq!(ioa.value(), 0xFFFFFF); // Masked to 24 bits
+    }
+
+    #[test]
+    fn test_ioa_from_bytes_too_short() {
+        let result = Ioa::from_bytes(&[0x00, 0x00]);
+        assert!(result.is_err());
+
+        let result = Ioa::from_bytes(&[0x00]);
+        assert!(result.is_err());
+
+        let result = Ioa::from_bytes(&[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ioa_display() {
+        let ioa = Ioa::new(12345);
+        assert_eq!(ioa.to_string(), "12345");
+    }
+
+    #[test]
+    fn test_single_point_roundtrip() {
+        for siq in [0x00, 0x01, 0x10, 0x20, 0x40, 0x80, 0x91, 0xFF] {
+            let sp = SinglePoint::from_u8(siq);
+            let encoded = sp.as_u8();
+            // Value bit and quality bits should be preserved
+            assert_eq!(encoded & 0xF1, siq & 0xF1);
+        }
+    }
+
+    #[test]
+    fn test_single_point_value_and_quality() {
+        // ON with good quality
+        let sp = SinglePoint::from_u8(0x01);
+        assert!(sp.value);
+        assert!(sp.quality.is_good());
+
+        // OFF with invalid quality
+        let sp = SinglePoint::from_u8(0x80);
+        assert!(!sp.value);
+        assert!(sp.quality.invalid);
+
+        // ON with blocked and substituted
+        let sp = SinglePoint::from_u8(0x31);
+        assert!(sp.value);
+        assert!(sp.quality.blocked);
+        assert!(sp.quality.substituted);
+    }
+
+    #[test]
+    fn test_double_point_value_all_cases() {
+        assert_eq!(DoublePointValue::from_u8(0x00), DoublePointValue::Indeterminate);
+        assert_eq!(DoublePointValue::from_u8(0x01), DoublePointValue::Off);
+        assert_eq!(DoublePointValue::from_u8(0x02), DoublePointValue::On);
+        assert_eq!(DoublePointValue::from_u8(0x03), DoublePointValue::IndeterminateOrFaulty);
+
+        // Test with upper bits set (should be masked)
+        assert_eq!(DoublePointValue::from_u8(0xFC), DoublePointValue::Indeterminate);
+        assert_eq!(DoublePointValue::from_u8(0xFD), DoublePointValue::Off);
+        assert_eq!(DoublePointValue::from_u8(0xFE), DoublePointValue::On);
+        assert_eq!(DoublePointValue::from_u8(0xFF), DoublePointValue::IndeterminateOrFaulty);
+    }
+
+    #[test]
+    fn test_double_point_with_quality() {
+        let dp = DoublePoint::from_u8(0x82); // ON + invalid
+        assert_eq!(dp.value, DoublePointValue::On);
+        assert!(dp.quality.invalid);
+    }
+
+    #[test]
+    fn test_quality_descriptor_roundtrip() {
+        let test_values = [0x00, 0x10, 0x20, 0x40, 0x80, 0xF0];
+        for val in test_values {
+            let qd = QualityDescriptor::from_siq(val);
+            let encoded = qd.to_siq();
+            assert_eq!(encoded, val & 0xF0); // Only quality bits
+        }
+    }
+
+    #[test]
+    fn test_quality_descriptor_is_good() {
+        assert!(QualityDescriptor::new().is_good());
+        assert!(!QualityDescriptor::invalid().is_good());
+
+        let qd = QualityDescriptor::from_siq(0x10); // Blocked
+        assert!(!qd.is_good());
+    }
+
+    #[test]
+    fn test_measured_quality_all_flags() {
+        let mq = MeasuredQuality::from_u8(0xF1); // OV + BL + SB + NT + IV
+        assert!(mq.overflow);
+        assert!(mq.blocked);
+        assert!(mq.substituted);
+        assert!(mq.not_topical);
+        assert!(mq.invalid);
+
+        let encoded = mq.as_u8();
+        assert_eq!(encoded, 0xF1);
+    }
+
+    #[test]
+    fn test_measured_quality_individual_flags() {
+        // Test each flag individually
+        assert!(MeasuredQuality::from_u8(0x01).overflow);
+        assert!(MeasuredQuality::from_u8(0x10).blocked);
+        assert!(MeasuredQuality::from_u8(0x20).substituted);
+        assert!(MeasuredQuality::from_u8(0x40).not_topical);
+        assert!(MeasuredQuality::from_u8(0x80).invalid);
+    }
+
+    #[test]
+    fn test_measured_value_creation() {
+        let mv = MeasuredValue::new(123.456);
+        assert!((mv.value - 123.456).abs() < 0.001);
+        assert!(mv.quality.is_good());
+
+        let mv = MeasuredValue::invalid(999.0);
+        assert!(mv.quality.invalid);
+    }
+
+    #[test]
+    fn test_cp56time2a_boundary_values() {
+        // Test minimum values
+        let time = Cp56Time2a {
+            milliseconds: 0,
+            minutes: 0,
+            hours: 0,
+            day: 1,
+            day_of_week: 1,
+            month: 1,
+            year: 0,
+            invalid: false,
+            summer_time: false,
+        };
+        let bytes = time.to_bytes();
+        let parsed = Cp56Time2a::from_bytes(&bytes).unwrap();
+        assert_eq!(parsed.milliseconds, 0);
+        assert_eq!(parsed.minutes, 0);
+        assert_eq!(parsed.hours, 0);
+
+        // Test maximum values
+        let time = Cp56Time2a {
+            milliseconds: 59999,
+            minutes: 59,
+            hours: 23,
+            day: 31,
+            day_of_week: 7,
+            month: 12,
+            year: 99,
+            invalid: true,
+            summer_time: true,
+        };
+        let bytes = time.to_bytes();
+        let parsed = Cp56Time2a::from_bytes(&bytes).unwrap();
+        assert_eq!(parsed.milliseconds, 59999);
+        assert_eq!(parsed.minutes, 59);
+        assert_eq!(parsed.hours, 23);
+        assert!(parsed.invalid);
+        assert!(parsed.summer_time);
+    }
+
+    #[test]
+    fn test_cp56time2a_too_short() {
+        let result = Cp56Time2a::from_bytes(&[0, 0, 0, 0, 0, 0]); // 6 bytes, need 7
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_asdu_header_with_flags() {
+        let mut header = AsduHeader::new(TypeId::MeasuredFloat, 5, Cot::Spontaneous, 1);
+        header.test = true;
+        header.negative = true;
+        header.originator = 42;
+
+        let mut buf = BytesMut::new();
+        header.encode(&mut buf);
+
+        let (parsed, len) = AsduHeader::parse(&buf).unwrap();
+        assert_eq!(len, 6);
+        assert_eq!(parsed.type_id, TypeId::MeasuredFloat);
+        assert_eq!(parsed.vsq.count, 5);
+        assert_eq!(parsed.cot, Cot::Spontaneous);
+        assert!(parsed.test);
+        assert!(parsed.negative);
+        assert_eq!(parsed.originator, 42);
+        assert_eq!(parsed.common_address, 1);
+    }
+
+    #[test]
+    fn test_asdu_header_parse_too_short() {
+        let data = [0x0D, 0x05, 0x03, 0x00, 0x01]; // Only 5 bytes
+        let result = AsduHeader::parse(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_asdu_encoded_len() {
+        let mut asdu = Asdu::new(AsduHeader::new(TypeId::SinglePoint, 1, Cot::Spontaneous, 1));
+        assert_eq!(asdu.encoded_len(), 6); // Header only
+
+        // Add an information object
+        asdu.objects.push(InformationObject {
+            ioa: Ioa::new(100),
+            data: Bytes::from_static(&[0x01]),
+        });
+        assert_eq!(asdu.encoded_len(), 6 + 3 + 1); // Header + IOA + data
+
+        // Add another
+        asdu.objects.push(InformationObject {
+            ioa: Ioa::new(200),
+            data: Bytes::from_static(&[0x00]),
+        });
+        assert_eq!(asdu.encoded_len(), 6 + 4 + 4); // Header + 2*(IOA + data)
+    }
+
+    #[test]
+    fn test_asdu_interrogation_command() {
+        let asdu = Asdu::interrogation_command(1, 20);
+        assert_eq!(asdu.header.type_id, TypeId::InterrogationCommand);
+        assert_eq!(asdu.header.cot, Cot::Activation);
+        assert_eq!(asdu.header.common_address, 1);
+        assert_eq!(asdu.objects.len(), 1);
+        assert_eq!(asdu.objects[0].ioa.value(), 0);
+        assert_eq!(&asdu.objects[0].data[..], &[20]);
+    }
+
+    #[test]
+    fn test_asdu_clock_sync_command() {
+        let time = Cp56Time2a {
+            milliseconds: 30000,
+            minutes: 30,
+            hours: 12,
+            day: 15,
+            day_of_week: 3,
+            month: 6,
+            year: 24,
+            invalid: false,
+            summer_time: false,
+        };
+        let asdu = Asdu::clock_sync_command(1, time);
+        assert_eq!(asdu.header.type_id, TypeId::ClockSync);
+        assert_eq!(asdu.header.cot, Cot::Activation);
+        assert_eq!(asdu.objects.len(), 1);
+        assert_eq!(asdu.objects[0].data.len(), 7);
+    }
+
+    #[test]
+    fn test_asdu_encode_decode_roundtrip() {
+        let asdu = Asdu::interrogation_command(100, 20);
+        let encoded = asdu.encode();
+
+        let parsed = Asdu::parse(&encoded).unwrap();
+        assert_eq!(parsed.header.type_id, TypeId::InterrogationCommand);
+        assert_eq!(parsed.header.common_address, 100);
+    }
+
+    #[test]
+    fn test_information_object_creation() {
+        let io = InformationObject::new(Ioa::new(12345), Bytes::from_static(&[0x01, 0x02, 0x03]));
+        assert_eq!(io.ioa.value(), 12345);
+        assert_eq!(io.data.len(), 3);
     }
 }

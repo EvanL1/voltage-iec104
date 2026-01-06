@@ -103,6 +103,7 @@ pub struct Iec104Codec {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::enum_variant_names)]
 enum DecodeState {
     #[default]
     WaitingForStart,
@@ -206,22 +207,24 @@ impl Encoder<Apdu> for Iec104Codec {
     type Error = Iec104Error;
 
     fn encode(&mut self, item: Apdu, dst: &mut BytesMut) -> std::result::Result<(), Self::Error> {
-        // Encode ASDU if present
-        let asdu_bytes = item.asdu.as_ref().map(|a| a.encode());
-        let asdu_len = asdu_bytes.as_ref().map(|b| b.len()).unwrap_or(0);
+        // Calculate ASDU length without encoding yet
+        let asdu_len = item.asdu.as_ref().map(|a| a.encoded_len()).unwrap_or(0);
 
         // Validate total length
         if asdu_len > MAX_APDU_LENGTH - 4 {
-            return Err(Iec104Error::Codec("ASDU too large".into()));
+            return Err(Iec104Error::Codec(std::borrow::Cow::Borrowed("ASDU too large")));
         }
+
+        // Reserve capacity for the entire frame
+        dst.reserve(6 + asdu_len);
 
         // Write header
         let header = item.apci.encode_header(asdu_len);
         dst.extend_from_slice(&header);
 
-        // Write ASDU if present
-        if let Some(asdu_bytes) = asdu_bytes {
-            dst.extend_from_slice(&asdu_bytes);
+        // Write ASDU directly to dst if present (zero-copy)
+        if let Some(asdu) = &item.asdu {
+            asdu.encode_to(dst);
         }
 
         Ok(())
@@ -355,5 +358,266 @@ mod tests {
             let decoded = codec.decode(&mut buf).unwrap().unwrap();
             assert_eq!(decoded.apci, original.apci);
         }
+    }
+
+    // ============ Additional Codec Tests ============
+
+    #[test]
+    fn test_decode_empty_buffer() {
+        let mut codec = Iec104Codec::new();
+        let mut buf = BytesMut::new();
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_decode_invalid_length_too_small() {
+        let mut codec = Iec104Codec::new();
+        // Length byte = 3, which is less than MIN_APDU_LENGTH (4)
+        let mut buf = BytesMut::from(&[0x68, 0x03, 0x00, 0x00, 0x00][..]);
+        // Should skip this start byte and restart
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_decode_invalid_length_too_large() {
+        let mut codec = Iec104Codec::new();
+        // Length byte = 254, which is greater than MAX_APDU_LENGTH (253)
+        let mut buf = BytesMut::from(&[0x68, 0xFE, 0x00, 0x00, 0x00, 0x00][..]);
+        // Should skip this start byte and restart
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_decode_multiple_frames_in_buffer() {
+        let mut codec = Iec104Codec::new();
+        // Two U-frames in one buffer
+        let mut buf = BytesMut::from(&[
+            0x68, 0x04, 0x07, 0x00, 0x00, 0x00, // STARTDT act
+            0x68, 0x04, 0x0B, 0x00, 0x00, 0x00, // STARTDT con
+        ][..]);
+
+        let apdu1 = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(apdu1.is_u_frame());
+        if let crate::types::Apci::UFrame { function } = apdu1.apci {
+            assert_eq!(function, UFunction::StartDtAct);
+        }
+
+        let apdu2 = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(apdu2.is_u_frame());
+        if let crate::types::Apci::UFrame { function } = apdu2.apci {
+            assert_eq!(function, UFunction::StartDtCon);
+        }
+
+        // Buffer should be empty now
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_decode_i_frame_with_asdu() {
+        let mut codec = Iec104Codec::new();
+        // I-frame with simple ASDU
+        let mut buf = BytesMut::from(&[
+            0x68, 0x0E, // Start + length (14 bytes)
+            0x00, 0x00, 0x00, 0x00, // Control: I-frame S=0, R=0
+            // ASDU header (6 bytes):
+            0x64, // TypeId: InterrogationCommand (100)
+            0x01, // VSQ: 1 object
+            0x06, // COT: Activation
+            0x00, // Originator
+            0x01, 0x00, // Common address: 1
+            // Information object (4 bytes):
+            0x00, 0x00, 0x00, // IOA: 0
+            0x14, // QOI: 20 (station interrogation)
+        ][..]);
+
+        let apdu = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(apdu.is_i_frame());
+        assert!(apdu.asdu.is_some());
+
+        let asdu = apdu.asdu.unwrap();
+        assert_eq!(asdu.header.type_id, TypeId::InterrogationCommand);
+        assert_eq!(asdu.header.cot, Cot::Activation);
+        assert_eq!(asdu.header.common_address, 1);
+    }
+
+    #[test]
+    fn test_decode_skip_multiple_garbage_bytes() {
+        let mut codec = Iec104Codec::new();
+        // Many garbage bytes before valid frame
+        let mut buf = BytesMut::from(&[
+            0xFF, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+            0x68, 0x04, 0x07, 0x00, 0x00, 0x00, // Valid U-frame
+        ][..]);
+
+        let apdu = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(apdu.is_u_frame());
+    }
+
+    #[test]
+    fn test_decode_partial_then_complete() {
+        let mut codec = Iec104Codec::new();
+
+        // First: only start byte
+        let mut buf = BytesMut::from(&[0x68][..]);
+        assert!(codec.decode(&mut buf).unwrap().is_none());
+
+        // Add length byte
+        buf.extend_from_slice(&[0x04]);
+        assert!(codec.decode(&mut buf).unwrap().is_none());
+
+        // Add partial control field
+        buf.extend_from_slice(&[0x07, 0x00]);
+        assert!(codec.decode(&mut buf).unwrap().is_none());
+
+        // Complete the frame
+        buf.extend_from_slice(&[0x00, 0x00]);
+        let apdu = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(apdu.is_u_frame());
+    }
+
+    #[test]
+    fn test_encode_i_frame_with_asdu() {
+        let mut codec = Iec104Codec::new();
+        let mut buf = BytesMut::new();
+
+        let asdu = Asdu::new(AsduHeader::new(
+            TypeId::MeasuredFloat,
+            2,
+            Cot::Spontaneous,
+            100,
+        ));
+        let apdu = Apdu::i_frame(50, 25, asdu);
+        codec.encode(apdu, &mut buf).unwrap();
+
+        // Verify structure
+        assert_eq!(buf[0], START_BYTE);
+        // Length should be 4 (control) + 6 (ASDU header) = 10
+        assert_eq!(buf[1], 10);
+
+        // Decode and verify
+        let decoded = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(decoded.is_i_frame());
+        assert_eq!(decoded.apci.send_seq(), Some(50));
+        assert_eq!(decoded.apci.recv_seq(), Some(25));
+    }
+
+    #[test]
+    fn test_encode_decode_s_frame_sequence_numbers() {
+        let mut codec = Iec104Codec::new();
+
+        // Test various sequence numbers
+        for recv_seq in [0, 1, 100, 1000, 16383, 32767] {
+            let mut buf = BytesMut::new();
+            let apdu = Apdu::s_frame(recv_seq);
+            codec.encode(apdu.clone(), &mut buf).unwrap();
+
+            let decoded = codec.decode(&mut buf).unwrap().unwrap();
+            assert!(decoded.is_s_frame());
+            assert_eq!(decoded.apci.recv_seq(), Some(recv_seq));
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_i_frame_sequence_numbers() {
+        let mut codec = Iec104Codec::new();
+
+        // Test various sequence number combinations
+        let test_cases = [
+            (0, 0),
+            (1, 1),
+            (100, 50),
+            (16383, 16383),
+            (32767, 32767),
+            (0, 32767),
+            (32767, 0),
+        ];
+
+        for (send_seq, recv_seq) in test_cases {
+            let mut buf = BytesMut::new();
+            let asdu = Asdu::new(AsduHeader::new(
+                TypeId::SinglePoint,
+                1,
+                Cot::Spontaneous,
+                1,
+            ));
+            let apdu = Apdu::i_frame(send_seq, recv_seq, asdu);
+            codec.encode(apdu, &mut buf).unwrap();
+
+            let decoded = codec.decode(&mut buf).unwrap().unwrap();
+            assert!(decoded.is_i_frame());
+            assert_eq!(decoded.apci.send_seq(), Some(send_seq));
+            assert_eq!(decoded.apci.recv_seq(), Some(recv_seq));
+        }
+    }
+
+    #[test]
+    fn test_apdu_display() {
+        let apdu = Apdu::u_frame(UFunction::TestFrAct);
+        let display = format!("{}", apdu);
+        assert!(display.contains("TESTFR"));
+
+        let apdu = Apdu::s_frame(100);
+        let display = format!("{}", apdu);
+        assert!(display.contains("100"));
+
+        let asdu = Asdu::new(AsduHeader::new(
+            TypeId::MeasuredFloat,
+            1,
+            Cot::Spontaneous,
+            1,
+        ));
+        let apdu = Apdu::i_frame(10, 5, asdu);
+        let display = format!("{}", apdu);
+        assert!(display.contains("M_ME_NC_1"));
+        assert!(display.contains("Spontaneous"));
+    }
+
+    #[test]
+    fn test_apdu_frame_type_helpers() {
+        let u_frame = Apdu::u_frame(UFunction::StartDtAct);
+        assert!(u_frame.is_u_frame());
+        assert!(!u_frame.is_s_frame());
+        assert!(!u_frame.is_i_frame());
+
+        let s_frame = Apdu::s_frame(0);
+        assert!(!s_frame.is_u_frame());
+        assert!(s_frame.is_s_frame());
+        assert!(!s_frame.is_i_frame());
+
+        let asdu = Asdu::new(AsduHeader::new(TypeId::SinglePoint, 1, Cot::Spontaneous, 1));
+        let i_frame = Apdu::i_frame(0, 0, asdu);
+        assert!(!i_frame.is_u_frame());
+        assert!(!i_frame.is_s_frame());
+        assert!(i_frame.is_i_frame());
+    }
+
+    #[test]
+    fn test_codec_state_reset_on_invalid() {
+        let mut codec = Iec104Codec::new();
+
+        // Invalid length followed by valid frame
+        let mut buf = BytesMut::from(&[
+            0x68, 0x01, // Invalid: length too small
+            0x68, 0x04, 0x07, 0x00, 0x00, 0x00, // Valid U-frame
+        ][..]);
+
+        // First decode should skip invalid and find valid
+        let apdu = codec.decode(&mut buf).unwrap().unwrap();
+        assert!(apdu.is_u_frame());
+    }
+
+    #[test]
+    fn test_decode_only_start_byte_no_length() {
+        let mut codec = Iec104Codec::new();
+        let mut buf = BytesMut::from(&[0x68][..]);
+
+        // Should return None, waiting for more data
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(result.is_none());
+        // Start byte should still be in buffer
+        assert_eq!(buf.len(), 1);
     }
 }
