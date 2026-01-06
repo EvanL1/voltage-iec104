@@ -185,7 +185,7 @@ impl Iec104Client {
     /// Connect to the server.
     pub async fn connect(&mut self) -> Result<()> {
         if self.state != ConnectionState::Disconnected {
-            return Err(Iec104Error::Connection("Already connected".into()));
+            return Err(Iec104Error::Connection(std::borrow::Cow::Borrowed("Already connected")));
         }
 
         let stream = timeout(
@@ -232,7 +232,7 @@ impl Iec104Client {
     /// Start data transfer (STARTDT act).
     pub async fn start_dt(&mut self) -> Result<()> {
         if self.state != ConnectionState::Connected {
-            return Err(Iec104Error::protocol("Not connected or already active"));
+            return Err(Iec104Error::protocol_static("Not connected or already active"));
         }
 
         self.send_u_frame(UFunction::StartDtAct).await?;
@@ -246,14 +246,14 @@ impl Iec104Client {
                 self.emit_event(Iec104Event::DataTransferStarted).await;
                 Ok(())
             }
-            _ => Err(Iec104Error::protocol("Unexpected response to STARTDT")),
+            _ => Err(Iec104Error::protocol_static("Unexpected response to STARTDT")),
         }
     }
 
     /// Stop data transfer (STOPDT act).
     pub async fn stop_dt(&mut self) -> Result<()> {
         if self.state != ConnectionState::Active {
-            return Err(Iec104Error::protocol("Data transfer not active"));
+            return Err(Iec104Error::protocol_static("Data transfer not active"));
         }
 
         self.state = ConnectionState::Stopping;
@@ -268,7 +268,7 @@ impl Iec104Client {
                 self.emit_event(Iec104Event::DataTransferStopped).await;
                 Ok(())
             }
-            _ => Err(Iec104Error::protocol("Unexpected response to STOPDT")),
+            _ => Err(Iec104Error::protocol_static("Unexpected response to STOPDT")),
         }
     }
 
@@ -443,7 +443,7 @@ impl Iec104Client {
             Ok(None) => {
                 // Connection closed
                 self.state = ConnectionState::Disconnected;
-                Err(Iec104Error::Connection("Connection closed by peer".into()))
+                Err(Iec104Error::Connection(std::borrow::Cow::Borrowed("Connection closed by peer")))
             }
             Err(_) => Ok(None), // Timeout, no data
         }
@@ -461,7 +461,7 @@ impl Iec104Client {
         framed
             .send(apdu)
             .await
-            .map_err(|e| Iec104Error::Codec(e.to_string()))?;
+            .map_err(|e| Iec104Error::Codec(std::borrow::Cow::Owned(e.to_string())))?;
         self.last_send_time = Instant::now();
         Ok(())
     }
@@ -472,7 +472,7 @@ impl Iec104Client {
         framed
             .send(apdu)
             .await
-            .map_err(|e| Iec104Error::Codec(e.to_string()))?;
+            .map_err(|e| Iec104Error::Codec(std::borrow::Cow::Owned(e.to_string())))?;
         self.last_send_time = Instant::now();
         self.unconfirmed_recvs = 0;
         Ok(())
@@ -488,7 +488,7 @@ impl Iec104Client {
         framed
             .send(apdu)
             .await
-            .map_err(|e| Iec104Error::Codec(e.to_string()))?;
+            .map_err(|e| Iec104Error::Codec(std::borrow::Cow::Owned(e.to_string())))?;
 
         self.send_seq = (self.send_seq + 1) % 32768;
         self.unconfirmed_sends += 1;
@@ -506,7 +506,7 @@ impl Iec104Client {
                 Ok(apdu)
             }
             Ok(Some(Err(e))) => Err(e),
-            Ok(None) => Err(Iec104Error::Connection("Connection closed".into())),
+            Ok(None) => Err(Iec104Error::Connection(std::borrow::Cow::Borrowed("Connection closed"))),
             Err(_) => Err(Iec104Error::T1Timeout),
         }
     }

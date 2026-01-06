@@ -65,10 +65,8 @@ impl UFunction {
             0x23 => Ok(Self::StopDtCon),
             0x43 => Ok(Self::TestFrAct),
             0x83 => Ok(Self::TestFrCon),
-            _ => Err(Iec104Error::invalid_frame(format!(
-                "Unknown U-frame function: 0x{:02X}",
-                byte
-            ))),
+            // Use static error for common case; specific byte info is less important than perf
+            _ => Err(Iec104Error::invalid_frame_static("Unknown U-frame function")),
         }
     }
 }
@@ -137,9 +135,10 @@ impl Apci {
     /// Parse APCI from bytes (4 bytes of control field).
     ///
     /// Note: This expects 4 bytes of control field, not the full 6-byte APCI.
+    #[inline]
     pub fn parse(control: &[u8]) -> Result<Self> {
         if control.len() < 4 {
-            return Err(Iec104Error::invalid_frame("Control field too short"));
+            return Err(Iec104Error::invalid_frame_static("Control field too short"));
         }
 
         let cf1 = control[0];
@@ -159,10 +158,7 @@ impl Apci {
             let function = UFunction::from_control_byte(cf1)?;
             Ok(Self::UFrame { function })
         } else {
-            Err(Iec104Error::invalid_frame(format!(
-                "Invalid control field: 0x{:02X}",
-                cf1
-            )))
+            Err(Iec104Error::invalid_frame_static("Invalid control field"))
         }
     }
 

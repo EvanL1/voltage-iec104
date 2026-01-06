@@ -58,7 +58,7 @@ impl Ioa {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() < 3 {
-            return Err(Iec104Error::invalid_asdu("IOA too short"));
+            return Err(Iec104Error::invalid_asdu_static("IOA too short"));
         }
         let value = bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16);
         Ok(Self(value))
@@ -108,7 +108,8 @@ pub struct AsduHeader {
 
 impl AsduHeader {
     /// Create a new ASDU header.
-    pub fn new(type_id: TypeId, count: u8, cot: Cot, common_address: u16) -> Self {
+    #[inline]
+    pub const fn new(type_id: TypeId, count: u8, cot: Cot, common_address: u16) -> Self {
         Self {
             type_id,
             vsq: Vsq::new(count, false),
@@ -123,9 +124,10 @@ impl AsduHeader {
     /// Parse ASDU header from bytes.
     ///
     /// Returns the header and the number of bytes consumed.
+    #[inline]
     pub fn parse(data: &[u8]) -> Result<(Self, usize)> {
         if data.len() < 6 {
-            return Err(Iec104Error::invalid_asdu("ASDU header too short"));
+            return Err(Iec104Error::invalid_asdu_static("ASDU header too short"));
         }
 
         let type_id = TypeId::from_u8(data[0])?;
@@ -154,6 +156,7 @@ impl AsduHeader {
     }
 
     /// Encode ASDU header to bytes.
+    #[inline]
     pub fn encode(&self, buf: &mut BytesMut) {
         buf.put_u8(self.type_id.as_u8());
         buf.put_u8(self.vsq.as_u8());
@@ -171,7 +174,8 @@ impl AsduHeader {
     }
 
     /// Get the encoded size in bytes.
-    pub fn encoded_size(&self) -> usize {
+    #[inline]
+    pub const fn encoded_size(&self) -> usize {
         6
     }
 }
@@ -187,7 +191,8 @@ pub struct SinglePoint {
 
 impl SinglePoint {
     /// Parse from byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             value: (value & 0x01) != 0,
             quality: QualityDescriptor::from_siq(value),
@@ -195,7 +200,8 @@ impl SinglePoint {
     }
 
     /// Encode to byte.
-    pub fn as_u8(&self) -> u8 {
+    #[inline]
+    pub const fn as_u8(&self) -> u8 {
         let mut result = if self.value { 0x01 } else { 0x00 };
         result |= self.quality.to_siq();
         result
@@ -217,13 +223,14 @@ pub enum DoublePointValue {
 
 impl DoublePointValue {
     /// Parse from byte (lower 2 bits).
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         match value & 0x03 {
             0 => Self::Indeterminate,
             1 => Self::Off,
             2 => Self::On,
             3 => Self::IndeterminateOrFaulty,
-            _ => unreachable!(),
+            _ => Self::Indeterminate, // Impossible case, but needed for const fn
         }
     }
 }
@@ -239,7 +246,8 @@ pub struct DoublePoint {
 
 impl DoublePoint {
     /// Parse from byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             value: DoublePointValue::from_u8(value),
             quality: QualityDescriptor::from_diq(value),
@@ -262,20 +270,30 @@ pub struct QualityDescriptor {
 
 impl QualityDescriptor {
     /// Create a new quality descriptor with all flags false.
-    pub fn new() -> Self {
-        Self::default()
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            blocked: false,
+            substituted: false,
+            not_topical: false,
+            invalid: false,
+        }
     }
 
     /// Create a quality descriptor indicating invalid data.
-    pub fn invalid() -> Self {
+    #[inline]
+    pub const fn invalid() -> Self {
         Self {
+            blocked: false,
+            substituted: false,
+            not_topical: false,
             invalid: true,
-            ..Default::default()
         }
     }
 
     /// Parse from SIQ byte (single-point information with quality).
-    pub fn from_siq(value: u8) -> Self {
+    #[inline]
+    pub const fn from_siq(value: u8) -> Self {
         Self {
             blocked: (value & 0x10) != 0,
             substituted: (value & 0x20) != 0,
@@ -285,7 +303,8 @@ impl QualityDescriptor {
     }
 
     /// Parse from DIQ byte (double-point information with quality).
-    pub fn from_diq(value: u8) -> Self {
+    #[inline]
+    pub const fn from_diq(value: u8) -> Self {
         Self {
             blocked: (value & 0x10) != 0,
             substituted: (value & 0x20) != 0,
@@ -295,7 +314,8 @@ impl QualityDescriptor {
     }
 
     /// Encode to SIQ byte (without value bits).
-    pub fn to_siq(&self) -> u8 {
+    #[inline]
+    pub const fn to_siq(&self) -> u8 {
         let mut result = 0u8;
         if self.blocked {
             result |= 0x10;
@@ -313,7 +333,8 @@ impl QualityDescriptor {
     }
 
     /// Check if the quality is good (all flags false).
-    pub fn is_good(&self) -> bool {
+    #[inline]
+    pub const fn is_good(&self) -> bool {
         !self.blocked && !self.substituted && !self.not_topical && !self.invalid
     }
 }
@@ -335,12 +356,20 @@ pub struct MeasuredQuality {
 
 impl MeasuredQuality {
     /// Create a new quality descriptor with all flags false.
-    pub fn new() -> Self {
-        Self::default()
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            overflow: false,
+            blocked: false,
+            substituted: false,
+            not_topical: false,
+            invalid: false,
+        }
     }
 
     /// Parse from QDS byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             overflow: (value & 0x01) != 0,
             blocked: (value & 0x10) != 0,
@@ -351,7 +380,8 @@ impl MeasuredQuality {
     }
 
     /// Encode to QDS byte.
-    pub fn as_u8(&self) -> u8 {
+    #[inline]
+    pub const fn as_u8(&self) -> u8 {
         let mut result = 0u8;
         if self.overflow {
             result |= 0x01;
@@ -372,7 +402,8 @@ impl MeasuredQuality {
     }
 
     /// Check if the quality is good (all flags false).
-    pub fn is_good(&self) -> bool {
+    #[inline]
+    pub const fn is_good(&self) -> bool {
         !self.overflow && !self.blocked && !self.substituted && !self.not_topical && !self.invalid
     }
 }
@@ -388,7 +419,8 @@ pub struct MeasuredValue {
 
 impl MeasuredValue {
     /// Create a new measured value.
-    pub fn new(value: f32) -> Self {
+    #[inline]
+    pub const fn new(value: f32) -> Self {
         Self {
             value,
             quality: MeasuredQuality::new(),
@@ -396,12 +428,16 @@ impl MeasuredValue {
     }
 
     /// Create a measured value with invalid quality.
-    pub fn invalid(value: f32) -> Self {
+    #[inline]
+    pub const fn invalid(value: f32) -> Self {
         Self {
             value,
             quality: MeasuredQuality {
+                overflow: false,
+                blocked: false,
+                substituted: false,
+                not_topical: false,
                 invalid: true,
-                ..Default::default()
             },
         }
     }
@@ -432,9 +468,10 @@ pub struct Cp56Time2a {
 
 impl Cp56Time2a {
     /// Parse from 7 bytes.
+    #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() < 7 {
-            return Err(Iec104Error::invalid_asdu("CP56Time2a too short"));
+            return Err(Iec104Error::invalid_asdu_static("CP56Time2a too short"));
         }
 
         let milliseconds = bytes[0] as u16 | ((bytes[1] as u16) << 8);
@@ -461,7 +498,8 @@ impl Cp56Time2a {
     }
 
     /// Encode to 7 bytes.
-    pub fn to_bytes(&self) -> [u8; 7] {
+    #[inline]
+    pub const fn to_bytes(&self) -> [u8; 7] {
         let mut result = [0u8; 7];
         result[0] = (self.milliseconds & 0xFF) as u8;
         result[1] = ((self.milliseconds >> 8) & 0xFF) as u8;

@@ -175,7 +175,8 @@ impl Cot {
             45 => Ok(Self::UnknownCot),
             46 => Ok(Self::UnknownCommonAddress),
             47 => Ok(Self::UnknownIoa),
-            _ => Err(Iec104Error::protocol(format!("Unknown COT: {}", cot_value))),
+            // Use static error to avoid allocation; actual value rarely needed in production
+            _ => Err(Iec104Error::protocol_static("Unknown COT")),
         }
     }
 
@@ -187,7 +188,7 @@ impl Cot {
 
     /// Check if this is a positive confirmation.
     #[inline]
-    pub fn is_positive(&self) -> bool {
+    pub const fn is_positive(&self) -> bool {
         matches!(
             self,
             Self::ActivationConfirm | Self::DeactivationConfirm | Self::ActivationTermination
@@ -196,7 +197,7 @@ impl Cot {
 
     /// Check if this is a negative confirmation.
     #[inline]
-    pub fn is_negative(&self) -> bool {
+    pub const fn is_negative(&self) -> bool {
         matches!(
             self,
             Self::UnknownTypeId | Self::UnknownCot | Self::UnknownCommonAddress | Self::UnknownIoa
@@ -205,13 +206,13 @@ impl Cot {
 
     /// Check if this COT indicates an interrogation response.
     #[inline]
-    pub fn is_interrogation_response(&self) -> bool {
+    pub const fn is_interrogation_response(&self) -> bool {
         matches!(self.as_u8(), 20..=36)
     }
 
     /// Check if this COT indicates a counter request response.
     #[inline]
-    pub fn is_counter_response(&self) -> bool {
+    pub const fn is_counter_response(&self) -> bool {
         matches!(self.as_u8(), 37..=41)
     }
 }

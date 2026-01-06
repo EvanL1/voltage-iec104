@@ -212,7 +212,7 @@ impl Encoder<Apdu> for Iec104Codec {
 
         // Validate total length
         if asdu_len > MAX_APDU_LENGTH - 4 {
-            return Err(Iec104Error::Codec("ASDU too large".into()));
+            return Err(Iec104Error::Codec(std::borrow::Cow::Borrowed("ASDU too large")));
         }
 
         // Reserve capacity for the entire frame

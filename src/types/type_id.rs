@@ -176,19 +176,19 @@ impl TypeId {
 
     /// Check if this type is in the monitoring direction (from RTU to master).
     #[inline]
-    pub fn is_monitoring(&self) -> bool {
+    pub const fn is_monitoring(&self) -> bool {
         matches!(self.as_u8(), 1..=70)
     }
 
     /// Check if this type is in the control direction (from master to RTU).
     #[inline]
-    pub fn is_control(&self) -> bool {
+    pub const fn is_control(&self) -> bool {
         matches!(self.as_u8(), 45..=51 | 58..=63 | 100..=107)
     }
 
     /// Check if this type contains a time tag.
     #[inline]
-    pub fn has_time_tag(&self) -> bool {
+    pub const fn has_time_tag(&self) -> bool {
         matches!(
             self,
             Self::SinglePointTime24
@@ -207,7 +207,8 @@ impl TypeId {
     }
 
     /// Get the IEC standard name (e.g., "M_SP_NA_1").
-    pub fn standard_name(&self) -> &'static str {
+    #[inline]
+    pub const fn standard_name(&self) -> &'static str {
         match self {
             Self::SinglePoint => "M_SP_NA_1",
             Self::SinglePointTime24 => "M_SP_TA_1",

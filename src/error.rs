@@ -1,16 +1,19 @@
 //! Error types for IEC 60870-5-104 protocol.
 
+use std::borrow::Cow;
 use thiserror::Error;
 
 /// Result type alias for IEC 104 operations.
 pub type Result<T> = std::result::Result<T, Iec104Error>;
 
 /// IEC 60870-5-104 protocol error types.
+///
+/// Uses `Cow<'static, str>` to avoid allocations for static error messages.
 #[derive(Debug, Error)]
 pub enum Iec104Error {
     /// Connection error
     #[error("Connection error: {0}")]
-    Connection(String),
+    Connection(Cow<'static, str>),
 
     /// Not connected to remote
     #[error("Not connected")]
@@ -26,15 +29,15 @@ pub enum Iec104Error {
 
     /// Protocol error
     #[error("Protocol error: {0}")]
-    Protocol(String),
+    Protocol(Cow<'static, str>),
 
     /// Invalid frame format
     #[error("Invalid frame: {0}")]
-    InvalidFrame(String),
+    InvalidFrame(Cow<'static, str>),
 
     /// Invalid ASDU
     #[error("Invalid ASDU: {0}")]
-    InvalidAsdu(String),
+    InvalidAsdu(Cow<'static, str>),
 
     /// Unknown type identifier
     #[error("Unknown type ID: {0}")]
@@ -66,30 +69,52 @@ pub enum Iec104Error {
 
     /// Codec error
     #[error("Codec error: {0}")]
-    Codec(String),
+    Codec(Cow<'static, str>),
 
     /// Internal error
     #[error("Internal error: {0}")]
-    Internal(String),
+    Internal(Cow<'static, str>),
 }
 
 impl Iec104Error {
-    /// Create a protocol error with a message.
+    /// Create a protocol error with a static message (zero allocation).
+    #[inline]
+    pub const fn protocol_static(msg: &'static str) -> Self {
+        Self::Protocol(Cow::Borrowed(msg))
+    }
+
+    /// Create a protocol error with a dynamic message.
+    #[inline]
     pub fn protocol(msg: impl Into<String>) -> Self {
-        Self::Protocol(msg.into())
+        Self::Protocol(Cow::Owned(msg.into()))
     }
 
-    /// Create an invalid frame error.
+    /// Create an invalid frame error with a static message (zero allocation).
+    #[inline]
+    pub const fn invalid_frame_static(msg: &'static str) -> Self {
+        Self::InvalidFrame(Cow::Borrowed(msg))
+    }
+
+    /// Create an invalid frame error with a dynamic message.
+    #[inline]
     pub fn invalid_frame(msg: impl Into<String>) -> Self {
-        Self::InvalidFrame(msg.into())
+        Self::InvalidFrame(Cow::Owned(msg.into()))
     }
 
-    /// Create an invalid ASDU error.
+    /// Create an invalid ASDU error with a static message (zero allocation).
+    #[inline]
+    pub const fn invalid_asdu_static(msg: &'static str) -> Self {
+        Self::InvalidAsdu(Cow::Borrowed(msg))
+    }
+
+    /// Create an invalid ASDU error with a dynamic message.
+    #[inline]
     pub fn invalid_asdu(msg: impl Into<String>) -> Self {
-        Self::InvalidAsdu(msg.into())
+        Self::InvalidAsdu(Cow::Owned(msg.into()))
     }
 
     /// Check if this error indicates a connection problem.
+    #[inline]
     pub fn is_connection_error(&self) -> bool {
         matches!(
             self,
@@ -98,6 +123,7 @@ impl Iec104Error {
     }
 
     /// Check if this error is retryable.
+    #[inline]
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -161,12 +187,12 @@ mod tests {
     fn test_error_display_all_variants() {
         // Test all error variants have proper Display
         let errors = [
-            Iec104Error::Connection("test".to_string()),
+            Iec104Error::Connection(Cow::Borrowed("test")),
             Iec104Error::NotConnected,
             Iec104Error::ConnectionTimeout,
-            Iec104Error::Protocol("test".to_string()),
-            Iec104Error::InvalidFrame("test".to_string()),
-            Iec104Error::InvalidAsdu("test".to_string()),
+            Iec104Error::Protocol(Cow::Borrowed("test")),
+            Iec104Error::InvalidFrame(Cow::Borrowed("test")),
+            Iec104Error::InvalidAsdu(Cow::Borrowed("test")),
             Iec104Error::UnknownTypeId(255),
             Iec104Error::SequenceMismatch { expected: 10, actual: 20 },
             Iec104Error::T1Timeout,
@@ -174,8 +200,8 @@ mod tests {
             Iec104Error::T3Timeout,
             Iec104Error::TooManyUnconfirmed(100),
             Iec104Error::ChannelClosed,
-            Iec104Error::Codec("test".to_string()),
-            Iec104Error::Internal("test".to_string()),
+            Iec104Error::Codec(Cow::Borrowed("test")),
+            Iec104Error::Internal(Cow::Borrowed("test")),
         ];
 
         for err in errors {
@@ -186,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_connection_error_variants() {
-        assert!(Iec104Error::Connection("addr".to_string()).is_connection_error());
+        assert!(Iec104Error::Connection(Cow::Borrowed("addr")).is_connection_error());
         assert!(Iec104Error::NotConnected.is_connection_error());
         assert!(Iec104Error::ConnectionTimeout.is_connection_error());
         assert!(Iec104Error::T3Timeout.is_connection_error());
@@ -194,8 +220,8 @@ mod tests {
         // Non-connection errors
         assert!(!Iec104Error::T1Timeout.is_connection_error());
         assert!(!Iec104Error::T2Timeout.is_connection_error());
-        assert!(!Iec104Error::Protocol("test".to_string()).is_connection_error());
-        assert!(!Iec104Error::InvalidFrame("test".to_string()).is_connection_error());
+        assert!(!Iec104Error::protocol_static("test").is_connection_error());
+        assert!(!Iec104Error::invalid_frame_static("test").is_connection_error());
         assert!(!Iec104Error::ChannelClosed.is_connection_error());
     }
 
@@ -208,16 +234,16 @@ mod tests {
 
         // Non-retryable errors
         assert!(!Iec104Error::NotConnected.is_retryable());
-        assert!(!Iec104Error::Connection("test".to_string()).is_retryable());
-        assert!(!Iec104Error::Protocol("test".to_string()).is_retryable());
-        assert!(!Iec104Error::InvalidFrame("test".to_string()).is_retryable());
-        assert!(!Iec104Error::InvalidAsdu("test".to_string()).is_retryable());
+        assert!(!Iec104Error::Connection(Cow::Borrowed("test")).is_retryable());
+        assert!(!Iec104Error::protocol_static("test").is_retryable());
+        assert!(!Iec104Error::invalid_frame_static("test").is_retryable());
+        assert!(!Iec104Error::invalid_asdu_static("test").is_retryable());
         assert!(!Iec104Error::UnknownTypeId(1).is_retryable());
         assert!(!Iec104Error::SequenceMismatch { expected: 1, actual: 2 }.is_retryable());
         assert!(!Iec104Error::TooManyUnconfirmed(10).is_retryable());
         assert!(!Iec104Error::ChannelClosed.is_retryable());
-        assert!(!Iec104Error::Codec("test".to_string()).is_retryable());
-        assert!(!Iec104Error::Internal("test".to_string()).is_retryable());
+        assert!(!Iec104Error::Codec(Cow::Borrowed("test")).is_retryable());
+        assert!(!Iec104Error::Internal(Cow::Borrowed("test")).is_retryable());
     }
 
     #[test]

@@ -20,7 +20,8 @@ pub struct DataPoint {
 
 impl DataPoint {
     /// Create a new data point.
-    pub fn new(ioa: u32, value: DataValue) -> Self {
+    #[inline]
+    pub const fn new(ioa: u32, value: DataValue) -> Self {
         Self {
             ioa,
             value,
@@ -30,7 +31,8 @@ impl DataPoint {
     }
 
     /// Create a data point with quality.
-    pub fn with_quality(ioa: u32, value: DataValue, quality: Quality) -> Self {
+    #[inline]
+    pub const fn with_quality(ioa: u32, value: DataValue, quality: Quality) -> Self {
         Self {
             ioa,
             value,
@@ -40,7 +42,8 @@ impl DataPoint {
     }
 
     /// Create a data point with timestamp.
-    pub fn with_timestamp(
+    #[inline]
+    pub const fn with_timestamp(
         ioa: u32,
         value: DataValue,
         quality: Quality,
@@ -55,16 +58,19 @@ impl DataPoint {
     }
 
     /// Check if the data point has good quality.
-    pub fn is_good(&self) -> bool {
+    #[inline]
+    pub const fn is_good(&self) -> bool {
         self.quality.is_good()
     }
 
     /// Get the value as f64 if numeric.
+    #[inline]
     pub fn as_f64(&self) -> Option<f64> {
         self.value.as_f64()
     }
 
     /// Get the value as bool if boolean.
+    #[inline]
     pub fn as_bool(&self) -> Option<bool> {
         self.value.as_bool()
     }
@@ -109,6 +115,7 @@ pub enum DataValue {
 
 impl DataValue {
     /// Convert to f64 if numeric.
+    #[inline]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Single(v) => Some(if *v { 1.0 } else { 0.0 }),
@@ -128,6 +135,7 @@ impl DataValue {
     }
 
     /// Convert to bool if boolean type.
+    #[inline]
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Single(v) => Some(*v),
@@ -141,12 +149,14 @@ impl DataValue {
     }
 
     /// Check if this is a boolean type.
-    pub fn is_boolean(&self) -> bool {
+    #[inline]
+    pub const fn is_boolean(&self) -> bool {
         matches!(self, Self::Single(_) | Self::Double(_))
     }
 
     /// Check if this is a numeric type.
-    pub fn is_numeric(&self) -> bool {
+    #[inline]
+    pub const fn is_numeric(&self) -> bool {
         matches!(
             self,
             Self::Normalized(_)
@@ -200,7 +210,8 @@ impl Quality {
     };
 
     /// Create from QualityDescriptor (for single/double point).
-    pub fn from_quality_descriptor(qd: QualityDescriptor) -> Self {
+    #[inline]
+    pub const fn from_quality_descriptor(qd: QualityDescriptor) -> Self {
         Self {
             overflow: false,
             blocked: qd.blocked,
@@ -212,7 +223,8 @@ impl Quality {
     }
 
     /// Create from MeasuredQuality (for measured values).
-    pub fn from_measured_quality(mq: MeasuredQuality) -> Self {
+    #[inline]
+    pub const fn from_measured_quality(mq: MeasuredQuality) -> Self {
         Self {
             overflow: mq.overflow,
             blocked: mq.blocked,
@@ -224,8 +236,8 @@ impl Quality {
     }
 
     /// Parse from QDS byte (Quality Descriptor for measured values).
-    #[inline]
-    pub fn from_qds(byte: u8) -> Self {
+    #[inline(always)]
+    pub const fn from_qds(byte: u8) -> Self {
         Self {
             overflow: (byte & 0x01) != 0,
             blocked: (byte & 0x10) != 0,
@@ -237,8 +249,8 @@ impl Quality {
     }
 
     /// Parse from SIQ byte (Single-point Information with Quality).
-    #[inline]
-    pub fn from_siq(byte: u8) -> Self {
+    #[inline(always)]
+    pub const fn from_siq(byte: u8) -> Self {
         Self {
             overflow: false,
             blocked: (byte & 0x10) != 0,
@@ -250,8 +262,8 @@ impl Quality {
     }
 
     /// Parse from DIQ byte (Double-point Information with Quality).
-    #[inline]
-    pub fn from_diq(byte: u8) -> Self {
+    #[inline(always)]
+    pub const fn from_diq(byte: u8) -> Self {
         Self {
             overflow: false,
             blocked: (byte & 0x10) != 0,
@@ -263,8 +275,8 @@ impl Quality {
     }
 
     /// Parse from BCR flags (Binary Counter Reading).
-    #[inline]
-    pub fn from_bcr_flags(byte: u8) -> Self {
+    #[inline(always)]
+    pub const fn from_bcr_flags(byte: u8) -> Self {
         Self {
             overflow: false,
             blocked: false,
@@ -276,8 +288,8 @@ impl Quality {
     }
 
     /// Check if quality is good (no flags set).
-    #[inline]
-    pub fn is_good(&self) -> bool {
+    #[inline(always)]
+    pub const fn is_good(&self) -> bool {
         !self.overflow
             && !self.blocked
             && !self.substituted
