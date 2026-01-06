@@ -125,7 +125,64 @@ pub enum TypeId {
     TestCommandTime56 = 107,
 }
 
+/// Compile-time element size lookup table.
+/// Maps TypeId raw value to element size (without IOA).
+/// Unknown types map to 0.
+const ELEMENT_SIZE_TABLE: [usize; 128] = {
+    let mut table = [0usize; 128];
+
+    // Process information in monitoring direction
+    table[1] = 1;   // SinglePoint: SIQ (1)
+    table[2] = 4;   // SinglePointTime24: SIQ + CP24Time2a (1+3)
+    table[3] = 1;   // DoublePoint: DIQ (1)
+    table[4] = 4;   // DoublePointTime24: DIQ + CP24Time2a (1+3)
+    table[5] = 2;   // StepPosition: VTI + QDS (1+1)
+    table[7] = 5;   // Bitstring32: BSI + QDS (4+1)
+    table[9] = 3;   // MeasuredNormalized: NVA + QDS (2+1)
+    table[10] = 6;  // MeasuredNormalizedTime24: NVA + QDS + CP24Time2a (2+1+3)
+    table[11] = 3;  // MeasuredScaled: SVA + QDS (2+1)
+    table[12] = 6;  // MeasuredScaledTime24: SVA + QDS + CP24Time2a (2+1+3)
+    table[13] = 5;  // MeasuredFloat: IEEE + QDS (4+1)
+    table[14] = 8;  // MeasuredFloatTime24: IEEE + QDS + CP24Time2a (4+1+3)
+    table[15] = 5;  // IntegratedTotals: BCR (5)
+    table[30] = 8;  // SinglePointTime56: SIQ + CP56Time2a (1+7)
+    table[31] = 8;  // DoublePointTime56: DIQ + CP56Time2a (1+7)
+    table[36] = 12; // MeasuredFloatTime56: IEEE + QDS + CP56Time2a (4+1+7)
+
+    // Process information in control direction
+    table[45] = 1;  // SingleCommand: SCO (1)
+    table[46] = 1;  // DoubleCommand: DCO (1)
+    table[47] = 1;  // RegulatingStep: RCO (1)
+    table[48] = 3;  // SetpointNormalized: NVA + QOS (2+1)
+    table[49] = 3;  // SetpointScaled: SVA + QOS (2+1)
+    table[50] = 5;  // SetpointFloat: IEEE + QOS (4+1)
+    table[51] = 4;  // Bitstring32Command: BSI (4)
+    table[58] = 8;  // SingleCommandTime56: SCO + CP56Time2a (1+7)
+    table[59] = 8;  // DoubleCommandTime56: DCO + CP56Time2a (1+7)
+    table[63] = 12; // SetpointFloatTime56: IEEE + QOS + CP56Time2a (4+1+7)
+
+    // System information
+    table[70] = 1;  // EndOfInit: COI (1)
+    table[100] = 1; // InterrogationCommand: QOI (1)
+    table[101] = 1; // CounterInterrogation: QCC (1)
+    table[102] = 0; // ReadCommand: (0)
+    table[103] = 7; // ClockSync: CP56Time2a (7)
+    table[104] = 2; // TestCommand: FBP (2)
+    table[105] = 1; // ResetProcess: QRP (1)
+    table[107] = 9; // TestCommandTime56: FBP + CP56Time2a (2+7)
+
+    table
+};
+
 impl TypeId {
+    /// Get the element size for this TypeId (without IOA).
+    /// Returns 0 for unknown types.
+    /// This is a compile-time constant lookup.
+    #[inline(always)]
+    pub const fn element_size(&self) -> usize {
+        ELEMENT_SIZE_TABLE[self.as_u8() as usize]
+    }
+
     /// Create TypeId from raw byte value.
     #[inline]
     pub fn from_u8(value: u8) -> Result<Self> {
@@ -475,5 +532,67 @@ mod tests {
         assert_eq!(TypeId::EndOfInit.as_u8(), 70);
         assert_eq!(TypeId::InterrogationCommand.as_u8(), 100);
         assert_eq!(TypeId::TestCommandTime56.as_u8(), 107);
+    }
+
+    // ============ Element Size Lookup Table Tests ============
+
+    #[test]
+    fn test_element_size_monitoring_types() {
+        // Test monitoring direction element sizes
+        assert_eq!(TypeId::SinglePoint.element_size(), 1);
+        assert_eq!(TypeId::SinglePointTime24.element_size(), 4);
+        assert_eq!(TypeId::DoublePoint.element_size(), 1);
+        assert_eq!(TypeId::DoublePointTime24.element_size(), 4);
+        assert_eq!(TypeId::StepPosition.element_size(), 2);
+        assert_eq!(TypeId::Bitstring32.element_size(), 5);
+        assert_eq!(TypeId::MeasuredNormalized.element_size(), 3);
+        assert_eq!(TypeId::MeasuredNormalizedTime24.element_size(), 6);
+        assert_eq!(TypeId::MeasuredScaled.element_size(), 3);
+        assert_eq!(TypeId::MeasuredScaledTime24.element_size(), 6);
+        assert_eq!(TypeId::MeasuredFloat.element_size(), 5);
+        assert_eq!(TypeId::MeasuredFloatTime24.element_size(), 8);
+        assert_eq!(TypeId::IntegratedTotals.element_size(), 5);
+        assert_eq!(TypeId::SinglePointTime56.element_size(), 8);
+        assert_eq!(TypeId::DoublePointTime56.element_size(), 8);
+        assert_eq!(TypeId::MeasuredFloatTime56.element_size(), 12);
+    }
+
+    #[test]
+    fn test_element_size_control_types() {
+        // Test control direction element sizes
+        assert_eq!(TypeId::SingleCommand.element_size(), 1);
+        assert_eq!(TypeId::DoubleCommand.element_size(), 1);
+        assert_eq!(TypeId::RegulatingStep.element_size(), 1);
+        assert_eq!(TypeId::SetpointNormalized.element_size(), 3);
+        assert_eq!(TypeId::SetpointScaled.element_size(), 3);
+        assert_eq!(TypeId::SetpointFloat.element_size(), 5);
+        assert_eq!(TypeId::Bitstring32Command.element_size(), 4);
+        assert_eq!(TypeId::SingleCommandTime56.element_size(), 8);
+        assert_eq!(TypeId::DoubleCommandTime56.element_size(), 8);
+        assert_eq!(TypeId::SetpointFloatTime56.element_size(), 12);
+    }
+
+    #[test]
+    fn test_element_size_system_types() {
+        // Test system information element sizes
+        assert_eq!(TypeId::EndOfInit.element_size(), 1);
+        assert_eq!(TypeId::InterrogationCommand.element_size(), 1);
+        assert_eq!(TypeId::CounterInterrogation.element_size(), 1);
+        assert_eq!(TypeId::ReadCommand.element_size(), 0);
+        assert_eq!(TypeId::ClockSync.element_size(), 7);
+        assert_eq!(TypeId::TestCommand.element_size(), 2);
+        assert_eq!(TypeId::ResetProcess.element_size(), 1);
+        assert_eq!(TypeId::TestCommandTime56.element_size(), 9);
+    }
+
+    #[test]
+    fn test_element_size_is_const() {
+        // Verify element_size can be used in const context
+        const SIZE: usize = TypeId::MeasuredFloat.element_size();
+        assert_eq!(SIZE, 5);
+
+        // Create a fixed-size array using element_size
+        const FLOAT_SIZE: usize = TypeId::MeasuredFloat.element_size();
+        let _buffer: [u8; FLOAT_SIZE] = [0; FLOAT_SIZE];
     }
 }

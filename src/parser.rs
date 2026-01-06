@@ -677,10 +677,7 @@ fn parse_integrated_totals(
         let invalid = (flags & 0x80) != 0;
         offset += 1;
 
-        let quality = Quality {
-            invalid,
-            ..Default::default()
-        };
+        let quality = Quality::with_invalid(invalid);
 
         points.push(DataPoint {
             ioa,
@@ -770,7 +767,7 @@ mod tests {
         assert_eq!(points[2].ioa, 102);
         assert_eq!(points[2].value, DataValue::Single(false));
         assert!(!points[2].is_good());
-        assert!(points[2].quality.invalid);
+        assert!(points[2].quality.invalid());
     }
 
     #[test]
@@ -885,8 +882,8 @@ mod tests {
 
         let points = parse_asdu(&asdu).unwrap();
         assert!(!points[0].is_good());
-        assert!(points[0].quality.invalid);
-        assert!(points[0].quality.overflow);
+        assert!(points[0].quality.invalid());
+        assert!(points[0].quality.overflow());
     }
 
     // ============ Additional Tests ============
@@ -1152,11 +1149,11 @@ mod tests {
         let points = parse_asdu(&asdu).unwrap();
 
         let q = &points[0].quality;
-        assert!(q.overflow);
-        assert!(q.blocked);
-        assert!(q.substituted);
-        assert!(q.not_topical);
-        assert!(q.invalid);
+        assert!(q.overflow());
+        assert!(q.blocked());
+        assert!(q.substituted());
+        assert!(q.not_topical());
+        assert!(q.invalid());
     }
 
     #[test]

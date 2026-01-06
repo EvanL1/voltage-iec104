@@ -170,132 +170,289 @@ impl DataValue {
 }
 
 /// Quality flags for data points.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Quality {
+///
+/// Packed into a single byte for cache efficiency. Bit layout:
+/// - Bit 0: overflow (OV)
+/// - Bit 1: blocked (BL)
+/// - Bit 2: substituted (SB)
+/// - Bit 3: not_topical (NT)
+/// - Bit 4: invalid (IV)
+/// - Bit 5: elapsed_time_invalid (EI)
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[repr(transparent)]
+pub struct Quality(u8);
+
+// Bit masks for quality flags (compile-time constants)
+impl Quality {
+    const OV_MASK: u8 = 0b0000_0001;
+    const BL_MASK: u8 = 0b0000_0010;
+    const SB_MASK: u8 = 0b0000_0100;
+    const NT_MASK: u8 = 0b0000_1000;
+    const IV_MASK: u8 = 0b0001_0000;
+    const EI_MASK: u8 = 0b0010_0000;
+}
+
+impl Quality {
     /// Overflow (OV) - value exceeds predefined range
-    pub overflow: bool,
+    #[inline(always)]
+    pub const fn overflow(&self) -> bool {
+        (self.0 & Self::OV_MASK) != 0
+    }
+
+    /// Set overflow flag
+    #[inline(always)]
+    pub const fn set_overflow(mut self, value: bool) -> Self {
+        if value {
+            self.0 |= Self::OV_MASK;
+        } else {
+            self.0 &= !Self::OV_MASK;
+        }
+        self
+    }
+
     /// Blocked (BL) - value is blocked for transmission
-    pub blocked: bool,
+    #[inline(always)]
+    pub const fn blocked(&self) -> bool {
+        (self.0 & Self::BL_MASK) != 0
+    }
+
+    /// Set blocked flag
+    #[inline(always)]
+    pub const fn set_blocked(mut self, value: bool) -> Self {
+        if value {
+            self.0 |= Self::BL_MASK;
+        } else {
+            self.0 &= !Self::BL_MASK;
+        }
+        self
+    }
+
     /// Substituted (SB) - value is substituted
-    pub substituted: bool,
+    #[inline(always)]
+    pub const fn substituted(&self) -> bool {
+        (self.0 & Self::SB_MASK) != 0
+    }
+
+    /// Set substituted flag
+    #[inline(always)]
+    pub const fn set_substituted(mut self, value: bool) -> Self {
+        if value {
+            self.0 |= Self::SB_MASK;
+        } else {
+            self.0 &= !Self::SB_MASK;
+        }
+        self
+    }
+
     /// Not topical (NT) - value is not topical (outdated)
-    pub not_topical: bool,
+    #[inline(always)]
+    pub const fn not_topical(&self) -> bool {
+        (self.0 & Self::NT_MASK) != 0
+    }
+
+    /// Set not_topical flag
+    #[inline(always)]
+    pub const fn set_not_topical(mut self, value: bool) -> Self {
+        if value {
+            self.0 |= Self::NT_MASK;
+        } else {
+            self.0 &= !Self::NT_MASK;
+        }
+        self
+    }
+
     /// Invalid (IV) - value is invalid
-    pub invalid: bool,
+    #[inline(always)]
+    pub const fn invalid(&self) -> bool {
+        (self.0 & Self::IV_MASK) != 0
+    }
+
+    /// Set invalid flag
+    #[inline(always)]
+    pub const fn set_invalid(mut self, value: bool) -> Self {
+        if value {
+            self.0 |= Self::IV_MASK;
+        } else {
+            self.0 &= !Self::IV_MASK;
+        }
+        self
+    }
+
     /// Elapsed time invalid (for counter values)
-    pub elapsed_time_invalid: bool,
+    #[inline(always)]
+    pub const fn elapsed_time_invalid(&self) -> bool {
+        (self.0 & Self::EI_MASK) != 0
+    }
+
+    /// Set elapsed_time_invalid flag
+    #[inline(always)]
+    pub const fn set_elapsed_time_invalid(mut self, value: bool) -> Self {
+        if value {
+            self.0 |= Self::EI_MASK;
+        } else {
+            self.0 &= !Self::EI_MASK;
+        }
+        self
+    }
+
+    /// Get the raw packed byte value
+    #[inline(always)]
+    pub const fn as_raw(&self) -> u8 {
+        self.0
+    }
+
+    /// Create from raw packed byte value
+    #[inline(always)]
+    pub const fn from_raw(raw: u8) -> Self {
+        Self(raw)
+    }
 }
 
 impl Quality {
     /// Good quality (all flags false).
     #[allow(non_upper_case_globals)]
-    pub const Good: Self = Self {
-        overflow: false,
-        blocked: false,
-        substituted: false,
-        not_topical: false,
-        invalid: false,
-        elapsed_time_invalid: false,
-    };
+    pub const Good: Self = Self(0);
 
     /// Invalid quality.
     #[allow(non_upper_case_globals)]
-    pub const Invalid: Self = Self {
-        overflow: false,
-        blocked: false,
-        substituted: false,
-        not_topical: false,
-        invalid: true,
-        elapsed_time_invalid: false,
-    };
+    pub const Invalid: Self = Self(Self::IV_MASK);
 
     /// Create from QualityDescriptor (for single/double point).
-    #[inline]
+    #[inline(always)]
     pub const fn from_quality_descriptor(qd: QualityDescriptor) -> Self {
-        Self {
-            overflow: false,
-            blocked: qd.blocked,
-            substituted: qd.substituted,
-            not_topical: qd.not_topical,
-            invalid: qd.invalid,
-            elapsed_time_invalid: false,
+        let mut raw = 0u8;
+        if qd.blocked {
+            raw |= Self::BL_MASK;
         }
+        if qd.substituted {
+            raw |= Self::SB_MASK;
+        }
+        if qd.not_topical {
+            raw |= Self::NT_MASK;
+        }
+        if qd.invalid {
+            raw |= Self::IV_MASK;
+        }
+        Self(raw)
     }
 
     /// Create from MeasuredQuality (for measured values).
-    #[inline]
+    #[inline(always)]
     pub const fn from_measured_quality(mq: MeasuredQuality) -> Self {
-        Self {
-            overflow: mq.overflow,
-            blocked: mq.blocked,
-            substituted: mq.substituted,
-            not_topical: mq.not_topical,
-            invalid: mq.invalid,
-            elapsed_time_invalid: false,
+        let mut raw = 0u8;
+        if mq.overflow {
+            raw |= Self::OV_MASK;
         }
+        if mq.blocked {
+            raw |= Self::BL_MASK;
+        }
+        if mq.substituted {
+            raw |= Self::SB_MASK;
+        }
+        if mq.not_topical {
+            raw |= Self::NT_MASK;
+        }
+        if mq.invalid {
+            raw |= Self::IV_MASK;
+        }
+        Self(raw)
     }
 
     /// Parse from QDS byte (Quality Descriptor for measured values).
+    /// Direct bit mapping for zero-cost parsing.
     #[inline(always)]
     pub const fn from_qds(byte: u8) -> Self {
-        Self {
-            overflow: (byte & 0x01) != 0,
-            blocked: (byte & 0x10) != 0,
-            substituted: (byte & 0x20) != 0,
-            not_topical: (byte & 0x40) != 0,
-            invalid: (byte & 0x80) != 0,
-            elapsed_time_invalid: false,
+        // QDS layout: IV(7) NT(6) SB(5) BL(4) _ _ _ OV(0)
+        // Our layout:  _ _ EI(5) IV(4) NT(3) SB(2) BL(1) OV(0)
+        let mut raw = 0u8;
+        if (byte & 0x01) != 0 {
+            raw |= Self::OV_MASK;
         }
+        if (byte & 0x10) != 0 {
+            raw |= Self::BL_MASK;
+        }
+        if (byte & 0x20) != 0 {
+            raw |= Self::SB_MASK;
+        }
+        if (byte & 0x40) != 0 {
+            raw |= Self::NT_MASK;
+        }
+        if (byte & 0x80) != 0 {
+            raw |= Self::IV_MASK;
+        }
+        Self(raw)
     }
 
     /// Parse from SIQ byte (Single-point Information with Quality).
     #[inline(always)]
     pub const fn from_siq(byte: u8) -> Self {
-        Self {
-            overflow: false,
-            blocked: (byte & 0x10) != 0,
-            substituted: (byte & 0x20) != 0,
-            not_topical: (byte & 0x40) != 0,
-            invalid: (byte & 0x80) != 0,
-            elapsed_time_invalid: false,
+        // SIQ layout: IV(7) NT(6) SB(5) BL(4) _ _ _ SPI(0)
+        let mut raw = 0u8;
+        if (byte & 0x10) != 0 {
+            raw |= Self::BL_MASK;
         }
+        if (byte & 0x20) != 0 {
+            raw |= Self::SB_MASK;
+        }
+        if (byte & 0x40) != 0 {
+            raw |= Self::NT_MASK;
+        }
+        if (byte & 0x80) != 0 {
+            raw |= Self::IV_MASK;
+        }
+        Self(raw)
     }
 
     /// Parse from DIQ byte (Double-point Information with Quality).
     #[inline(always)]
     pub const fn from_diq(byte: u8) -> Self {
-        Self {
-            overflow: false,
-            blocked: (byte & 0x10) != 0,
-            substituted: (byte & 0x20) != 0,
-            not_topical: (byte & 0x40) != 0,
-            invalid: (byte & 0x80) != 0,
-            elapsed_time_invalid: false,
-        }
+        // DIQ layout: IV(7) NT(6) SB(5) BL(4) _ _ DPI(1:0)
+        // Same quality bit positions as SIQ
+        Self::from_siq(byte)
     }
 
     /// Parse from BCR flags (Binary Counter Reading).
     #[inline(always)]
     pub const fn from_bcr_flags(byte: u8) -> Self {
-        Self {
-            overflow: false,
-            blocked: false,
-            substituted: false,
-            not_topical: false,
-            invalid: (byte & 0x80) != 0,
-            elapsed_time_invalid: (byte & 0x40) != 0,
+        // BCR flags: IV(7) CA(6) CY(5) SQ(4:0)
+        let mut raw = 0u8;
+        if (byte & 0x80) != 0 {
+            raw |= Self::IV_MASK;
         }
+        if (byte & 0x40) != 0 {
+            raw |= Self::EI_MASK; // CA maps to elapsed_time_invalid
+        }
+        Self(raw)
     }
 
     /// Check if quality is good (no flags set).
+    /// Single comparison for maximum efficiency.
     #[inline(always)]
     pub const fn is_good(&self) -> bool {
-        !self.overflow
-            && !self.blocked
-            && !self.substituted
-            && !self.not_topical
-            && !self.invalid
-            && !self.elapsed_time_invalid
+        self.0 == 0
+    }
+
+    /// Create a new Quality with only the invalid flag set based on a boolean.
+    #[inline(always)]
+    pub const fn with_invalid(invalid: bool) -> Self {
+        if invalid {
+            Self(Self::IV_MASK)
+        } else {
+            Self(0)
+        }
+    }
+}
+
+impl std::fmt::Debug for Quality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Quality")
+            .field("overflow", &self.overflow())
+            .field("blocked", &self.blocked())
+            .field("substituted", &self.substituted())
+            .field("not_topical", &self.not_topical())
+            .field("invalid", &self.invalid())
+            .field("elapsed_time_invalid", &self.elapsed_time_invalid())
+            .finish()
     }
 }
 
@@ -314,22 +471,22 @@ impl std::fmt::Display for Quality {
             f.write_str(flag)
         };
 
-        if self.overflow {
+        if self.overflow() {
             write_flag(f, "OV")?;
         }
-        if self.blocked {
+        if self.blocked() {
             write_flag(f, "BL")?;
         }
-        if self.substituted {
+        if self.substituted() {
             write_flag(f, "SB")?;
         }
-        if self.not_topical {
+        if self.not_topical() {
             write_flag(f, "NT")?;
         }
-        if self.invalid {
+        if self.invalid() {
             write_flag(f, "IV")?;
         }
-        if self.elapsed_time_invalid {
+        if self.elapsed_time_invalid() {
             write_flag(f, "EI")?;
         }
         Ok(())
@@ -363,9 +520,9 @@ mod tests {
         assert!(!Quality::Invalid.is_good());
 
         let q = Quality::from_qds(0x81); // IV + OV
-        assert!(q.invalid);
-        assert!(q.overflow);
-        assert!(!q.blocked);
+        assert!(q.invalid());
+        assert!(q.overflow());
+        assert!(!q.blocked());
     }
 
     #[test]
@@ -373,11 +530,7 @@ mod tests {
         assert_eq!(Quality::Good.to_string(), "Good");
         assert_eq!(Quality::Invalid.to_string(), "IV");
 
-        let q = Quality {
-            overflow: true,
-            invalid: true,
-            ..Default::default()
-        };
+        let q = Quality::Good.set_overflow(true).set_invalid(true);
         assert_eq!(q.to_string(), "OV|IV");
     }
 
@@ -392,7 +545,7 @@ mod tests {
         );
         assert_eq!(dp.ioa, 1001);
         assert!(!dp.is_good());
-        assert!(dp.quality.invalid);
+        assert!(dp.quality.invalid());
     }
 
     #[test]
@@ -525,11 +678,11 @@ mod tests {
             invalid: false,
         };
         let q = Quality::from_quality_descriptor(qd);
-        assert!(q.blocked);
-        assert!(q.substituted);
-        assert!(!q.not_topical);
-        assert!(!q.invalid);
-        assert!(!q.overflow); // Not in QualityDescriptor
+        assert!(q.blocked());
+        assert!(q.substituted());
+        assert!(!q.not_topical());
+        assert!(!q.invalid());
+        assert!(!q.overflow()); // Not in QualityDescriptor
     }
 
     #[test]
@@ -542,33 +695,32 @@ mod tests {
             invalid: true,
         };
         let q = Quality::from_measured_quality(mq);
-        assert!(q.overflow);
-        assert!(!q.blocked);
-        assert!(q.substituted);
-        assert!(!q.not_topical);
-        assert!(q.invalid);
+        assert!(q.overflow());
+        assert!(!q.blocked());
+        assert!(q.substituted());
+        assert!(!q.not_topical());
+        assert!(q.invalid());
     }
 
     #[test]
     fn test_quality_from_bcr_flags() {
         // Test BCR flags: bits 5=carry, 6=adjusted, 7=invalid
         let q = Quality::from_bcr_flags(0xC0); // invalid + elapsed_time_invalid
-        assert!(q.invalid);
-        assert!(q.elapsed_time_invalid);
-        assert!(!q.overflow);
-        assert!(!q.blocked);
+        assert!(q.invalid());
+        assert!(q.elapsed_time_invalid());
+        assert!(!q.overflow());
+        assert!(!q.blocked());
     }
 
     #[test]
     fn test_quality_display_all_flags() {
-        let q = Quality {
-            overflow: true,
-            blocked: true,
-            substituted: true,
-            not_topical: true,
-            invalid: true,
-            elapsed_time_invalid: true,
-        };
+        let q = Quality::Good
+            .set_overflow(true)
+            .set_blocked(true)
+            .set_substituted(true)
+            .set_not_topical(true)
+            .set_invalid(true)
+            .set_elapsed_time_invalid(true);
         let display = q.to_string();
         assert!(display.contains("OV"));
         assert!(display.contains("BL"));
@@ -580,38 +732,38 @@ mod tests {
 
     #[test]
     fn test_quality_display_single_flag() {
-        let q = Quality { overflow: true, ..Default::default() };
+        let q = Quality::Good.set_overflow(true);
         assert_eq!(q.to_string(), "OV");
 
-        let q = Quality { blocked: true, ..Default::default() };
+        let q = Quality::Good.set_blocked(true);
         assert_eq!(q.to_string(), "BL");
 
-        let q = Quality { substituted: true, ..Default::default() };
+        let q = Quality::Good.set_substituted(true);
         assert_eq!(q.to_string(), "SB");
 
-        let q = Quality { not_topical: true, ..Default::default() };
+        let q = Quality::Good.set_not_topical(true);
         assert_eq!(q.to_string(), "NT");
 
-        let q = Quality { elapsed_time_invalid: true, ..Default::default() };
+        let q = Quality::Good.set_elapsed_time_invalid(true);
         assert_eq!(q.to_string(), "EI");
     }
 
     #[test]
     fn test_quality_from_qds_all_combinations() {
         // Test all individual QDS flags
-        assert!(Quality::from_qds(0x01).overflow);
-        assert!(Quality::from_qds(0x10).blocked);
-        assert!(Quality::from_qds(0x20).substituted);
-        assert!(Quality::from_qds(0x40).not_topical);
-        assert!(Quality::from_qds(0x80).invalid);
+        assert!(Quality::from_qds(0x01).overflow());
+        assert!(Quality::from_qds(0x10).blocked());
+        assert!(Quality::from_qds(0x20).substituted());
+        assert!(Quality::from_qds(0x40).not_topical());
+        assert!(Quality::from_qds(0x80).invalid());
 
         // Test combination
         let q = Quality::from_qds(0xF1);
-        assert!(q.overflow);
-        assert!(q.blocked);
-        assert!(q.substituted);
-        assert!(q.not_topical);
-        assert!(q.invalid);
+        assert!(q.overflow());
+        assert!(q.blocked());
+        assert!(q.substituted());
+        assert!(q.not_topical());
+        assert!(q.invalid());
     }
 
     #[test]
@@ -620,10 +772,10 @@ mod tests {
         for byte in [0x00, 0x10, 0x20, 0x40, 0x80, 0xF0] {
             let siq = Quality::from_siq(byte);
             let diq = Quality::from_diq(byte);
-            assert_eq!(siq.blocked, diq.blocked);
-            assert_eq!(siq.substituted, diq.substituted);
-            assert_eq!(siq.not_topical, diq.not_topical);
-            assert_eq!(siq.invalid, diq.invalid);
+            assert_eq!(siq.blocked(), diq.blocked());
+            assert_eq!(siq.substituted(), diq.substituted());
+            assert_eq!(siq.not_topical(), diq.not_topical());
+            assert_eq!(siq.invalid(), diq.invalid());
         }
     }
 
@@ -643,5 +795,104 @@ mod tests {
 
         let dp = DataPoint::new(2, DataValue::Float(1.0));
         assert_eq!(dp.as_bool(), None);
+    }
+
+    // ============ Quality Packed Struct Tests ============
+
+    #[test]
+    fn test_quality_packed_size() {
+        // Verify Quality is only 1 byte (packed into u8)
+        assert_eq!(std::mem::size_of::<Quality>(), 1);
+    }
+
+    #[test]
+    fn test_quality_builder_pattern() {
+        // Test chained builder pattern
+        let q = Quality::Good
+            .set_overflow(true)
+            .set_blocked(true)
+            .set_substituted(true)
+            .set_not_topical(true)
+            .set_invalid(true)
+            .set_elapsed_time_invalid(true);
+
+        assert!(q.overflow());
+        assert!(q.blocked());
+        assert!(q.substituted());
+        assert!(q.not_topical());
+        assert!(q.invalid());
+        assert!(q.elapsed_time_invalid());
+        assert!(!q.is_good());
+    }
+
+    #[test]
+    fn test_quality_builder_toggle() {
+        // Test setting and unsetting flags
+        let q = Quality::Good.set_invalid(true);
+        assert!(q.invalid());
+
+        let q = q.set_invalid(false);
+        assert!(!q.invalid());
+        assert!(q.is_good());
+    }
+
+    #[test]
+    fn test_quality_raw_roundtrip() {
+        // Test raw byte roundtrip
+        for raw in [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x3F] {
+            let q = Quality::from_raw(raw);
+            assert_eq!(q.as_raw(), raw);
+        }
+    }
+
+    #[test]
+    fn test_quality_with_invalid_constructor() {
+        // Test the with_invalid convenience constructor
+        let q = Quality::with_invalid(false);
+        assert!(q.is_good());
+
+        let q = Quality::with_invalid(true);
+        assert!(!q.is_good());
+        assert!(q.invalid());
+    }
+
+    #[test]
+    fn test_quality_const_evaluation() {
+        // Verify Quality methods are const-evaluable
+        const GOOD: Quality = Quality::Good;
+        const INVALID: Quality = Quality::Invalid;
+        const IS_GOOD: bool = GOOD.is_good();
+        const IS_BAD: bool = INVALID.is_good();
+
+        assert!(IS_GOOD);
+        assert!(!IS_BAD);
+    }
+
+    #[test]
+    fn test_quality_bit_isolation() {
+        // Test each bit is isolated correctly
+        let q = Quality::from_raw(0x01); // OV only
+        assert!(q.overflow());
+        assert!(!q.blocked());
+
+        let q = Quality::from_raw(0x02); // BL only
+        assert!(!q.overflow());
+        assert!(q.blocked());
+        assert!(!q.substituted());
+
+        let q = Quality::from_raw(0x04); // SB only
+        assert!(q.substituted());
+        assert!(!q.not_topical());
+
+        let q = Quality::from_raw(0x08); // NT only
+        assert!(q.not_topical());
+        assert!(!q.invalid());
+
+        let q = Quality::from_raw(0x10); // IV only
+        assert!(q.invalid());
+        assert!(!q.elapsed_time_invalid());
+
+        let q = Quality::from_raw(0x20); // EI only
+        assert!(q.elapsed_time_invalid());
     }
 }
