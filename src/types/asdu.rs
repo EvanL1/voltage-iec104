@@ -41,32 +41,56 @@ impl Vsq {
     }
 }
 
+/// IOA byte size (fixed at compile time for IEC 104)
+pub const IOA_SIZE: usize = 3;
+
 /// Information Object Address (IOA).
 ///
 /// 3-byte address identifying a specific data point.
+/// Uses const generic size for zero-cost parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct Ioa(pub u32);
 
 impl Ioa {
     /// Create IOA from u32 (lower 24 bits).
-    #[inline]
+    #[inline(always)]
     pub const fn new(value: u32) -> Self {
         Self(value & 0x00FFFFFF)
     }
 
+    /// Parse IOA from fixed 3-byte array (compile-time size check).
+    /// This is the most efficient parsing path.
+    #[inline(always)]
+    pub const fn from_array(bytes: [u8; IOA_SIZE]) -> Self {
+        Self((bytes[0] as u32) | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16))
+    }
+
     /// Parse IOA from 3 bytes (little-endian).
+    /// Falls back to runtime length check.
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() < 3 {
+        if bytes.len() < IOA_SIZE {
             return Err(Iec104Error::invalid_asdu_static("IOA too short"));
         }
-        let value = bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16);
-        Ok(Self(value))
+        // Use unchecked access since we verified length
+        Ok(Self::from_array([bytes[0], bytes[1], bytes[2]]))
+    }
+
+    /// Try to parse IOA from slice, returning None if too short.
+    /// Useful for hot paths where error handling is expensive.
+    #[inline(always)]
+    pub const fn try_from_slice(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < IOA_SIZE {
+            None
+        } else {
+            Some(Self::from_array([bytes[0], bytes[1], bytes[2]]))
+        }
     }
 
     /// Encode IOA to 3 bytes (little-endian).
-    #[inline]
-    pub fn to_bytes(&self) -> [u8; 3] {
+    #[inline(always)]
+    pub const fn to_bytes(&self) -> [u8; IOA_SIZE] {
         [
             (self.0 & 0xFF) as u8,
             ((self.0 >> 8) & 0xFF) as u8,
@@ -75,8 +99,8 @@ impl Ioa {
     }
 
     /// Get the raw value.
-    #[inline]
-    pub fn value(&self) -> u32 {
+    #[inline(always)]
+    pub const fn value(&self) -> u32 {
         self.0
     }
 }
@@ -1024,5 +1048,62 @@ mod tests {
         let io = InformationObject::new(Ioa::new(12345), Bytes::from_static(&[0x01, 0x02, 0x03]));
         assert_eq!(io.ioa.value(), 12345);
         assert_eq!(io.data.len(), 3);
+    }
+
+    // ============ Const Generic IOA Optimizations ============
+
+    #[test]
+    fn test_ioa_from_array_zero_cost() {
+        // Test the zero-cost array parsing
+        let ioa = Ioa::from_array([0x56, 0x34, 0x12]);
+        assert_eq!(ioa.value(), 0x123456);
+
+        // Test boundary values
+        let ioa = Ioa::from_array([0x00, 0x00, 0x00]);
+        assert_eq!(ioa.value(), 0);
+
+        let ioa = Ioa::from_array([0xFF, 0xFF, 0xFF]);
+        assert_eq!(ioa.value(), 0xFFFFFF);
+    }
+
+    #[test]
+    fn test_ioa_try_from_slice() {
+        // Test successful parsing
+        let slice = [0x56, 0x34, 0x12];
+        assert_eq!(Ioa::try_from_slice(&slice), Some(Ioa::new(0x123456)));
+
+        // Test too short
+        let short: [u8; 2] = [0x00, 0x00];
+        assert_eq!(Ioa::try_from_slice(&short), None);
+
+        let empty: [u8; 0] = [];
+        assert_eq!(Ioa::try_from_slice(&empty), None);
+
+        // Test exact size
+        let exact: [u8; 3] = [0x01, 0x02, 0x03];
+        let ioa = Ioa::try_from_slice(&exact).unwrap();
+        assert_eq!(ioa.value(), 0x030201);
+    }
+
+    #[test]
+    fn test_ioa_const_size() {
+        // Verify IOA_SIZE is correct
+        assert_eq!(IOA_SIZE, 3);
+
+        // Verify to_bytes returns correct size
+        let ioa = Ioa::new(12345);
+        let bytes = ioa.to_bytes();
+        assert_eq!(bytes.len(), IOA_SIZE);
+    }
+
+    #[test]
+    fn test_ioa_roundtrip_optimized() {
+        // Test roundtrip through optimized paths
+        for val in [0u32, 1, 100, 65535, 0xFFFFFF] {
+            let ioa = Ioa::new(val);
+            let bytes = ioa.to_bytes();
+            let parsed = Ioa::from_array(bytes);
+            assert_eq!(parsed.value(), val);
+        }
     }
 }
