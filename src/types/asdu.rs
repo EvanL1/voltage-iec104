@@ -20,12 +20,14 @@ pub struct Vsq {
 
 impl Vsq {
     /// Create a new VSQ.
-    pub fn new(count: u8, sequence: bool) -> Self {
+    #[inline]
+    pub const fn new(count: u8, sequence: bool) -> Self {
         Self { count, sequence }
     }
 
     /// Parse VSQ from byte.
-    pub fn from_u8(value: u8) -> Self {
+    #[inline]
+    pub const fn from_u8(value: u8) -> Self {
         Self {
             count: value & 0x7F,
             sequence: (value & 0x80) != 0,
@@ -33,7 +35,8 @@ impl Vsq {
     }
 
     /// Encode VSQ to byte.
-    pub fn as_u8(&self) -> u8 {
+    #[inline]
+    pub const fn as_u8(&self) -> u8 {
         (self.count & 0x7F) | if self.sequence { 0x80 } else { 0 }
     }
 }
@@ -46,11 +49,13 @@ pub struct Ioa(pub u32);
 
 impl Ioa {
     /// Create IOA from u32 (lower 24 bits).
-    pub fn new(value: u32) -> Self {
+    #[inline]
+    pub const fn new(value: u32) -> Self {
         Self(value & 0x00FFFFFF)
     }
 
     /// Parse IOA from 3 bytes (little-endian).
+    #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() < 3 {
             return Err(Iec104Error::invalid_asdu("IOA too short"));
@@ -60,6 +65,7 @@ impl Ioa {
     }
 
     /// Encode IOA to 3 bytes (little-endian).
+    #[inline]
     pub fn to_bytes(&self) -> [u8; 3] {
         [
             (self.0 & 0xFF) as u8,
@@ -69,6 +75,7 @@ impl Ioa {
     }
 
     /// Get the raw value.
+    #[inline]
     pub fn value(&self) -> u32 {
         self.0
     }
@@ -514,7 +521,7 @@ impl Asdu {
         ));
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(0),
-            data: Bytes::from(vec![qoi]),
+            data: Bytes::copy_from_slice(&[qoi]),
         });
         asdu
     }
@@ -529,7 +536,7 @@ impl Asdu {
         ));
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(0),
-            data: Bytes::from(time.to_bytes().to_vec()),
+            data: Bytes::copy_from_slice(&time.to_bytes()),
         });
         asdu
     }
@@ -548,8 +555,15 @@ impl Asdu {
 
     /// Encode ASDU to bytes.
     pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        self.header.encode(&mut buf);
+        let mut buf = BytesMut::with_capacity(self.encoded_len());
+        self.encode_to(&mut buf);
+        buf
+    }
+
+    /// Encode ASDU directly into the provided buffer (zero-copy).
+    #[inline]
+    pub fn encode_to(&self, buf: &mut BytesMut) {
+        self.header.encode(buf);
 
         // Encode information objects
         for obj in &self.objects {
@@ -561,8 +575,19 @@ impl Asdu {
         if self.objects.is_empty() && !self.raw_data.is_empty() {
             buf.put_slice(&self.raw_data);
         }
+    }
 
-        buf
+    /// Calculate the encoded length of this ASDU.
+    #[inline]
+    pub fn encoded_len(&self) -> usize {
+        let mut len = self.header.encoded_size();
+        for obj in &self.objects {
+            len += 3 + obj.data.len(); // IOA (3 bytes) + data
+        }
+        if self.objects.is_empty() {
+            len += self.raw_data.len();
+        }
+        len
     }
 }
 

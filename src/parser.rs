@@ -117,17 +117,15 @@ fn parse_single_point(
         // Get IOA
         let ioa = if sequence {
             first_ioa + i as u32
-        } else {
-            if i > 0 {
-                if offset + 3 > data.len() {
-                    return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
-                }
-                let ioa = parse_ioa(&data[offset..offset + 3])?;
-                offset += 3;
-                ioa
-            } else {
-                first_ioa
+        } else if i > 0 {
+            if offset + 3 > data.len() {
+                return Err(Iec104Error::invalid_asdu("Data too short for IOA"));
             }
+            let ioa = parse_ioa(&data[offset..offset + 3])?;
+            offset += 3;
+            ioa
+        } else {
+            first_ioa
         };
 
         // Check data length
@@ -702,11 +700,18 @@ fn parse_integrated_totals(
 }
 
 /// Parse IOA from 3 bytes (little-endian).
+#[inline(always)]
 fn parse_ioa(bytes: &[u8]) -> Result<u32> {
     if bytes.len() < 3 {
         return Err(Iec104Error::invalid_asdu("IOA too short"));
     }
-    Ok(bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16))
+    Ok(read_ioa_le(bytes))
+}
+
+/// Read IOA as little-endian u24 (assumes bytes.len() >= 3).
+#[inline(always)]
+fn read_ioa_le(bytes: &[u8]) -> u32 {
+    bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16)
 }
 
 #[cfg(test)]

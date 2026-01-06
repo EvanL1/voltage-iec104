@@ -103,6 +103,7 @@ pub struct Iec104Codec {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::enum_variant_names)]
 enum DecodeState {
     #[default]
     WaitingForStart,
@@ -206,22 +207,24 @@ impl Encoder<Apdu> for Iec104Codec {
     type Error = Iec104Error;
 
     fn encode(&mut self, item: Apdu, dst: &mut BytesMut) -> std::result::Result<(), Self::Error> {
-        // Encode ASDU if present
-        let asdu_bytes = item.asdu.as_ref().map(|a| a.encode());
-        let asdu_len = asdu_bytes.as_ref().map(|b| b.len()).unwrap_or(0);
+        // Calculate ASDU length without encoding yet
+        let asdu_len = item.asdu.as_ref().map(|a| a.encoded_len()).unwrap_or(0);
 
         // Validate total length
         if asdu_len > MAX_APDU_LENGTH - 4 {
             return Err(Iec104Error::Codec("ASDU too large".into()));
         }
 
+        // Reserve capacity for the entire frame
+        dst.reserve(6 + asdu_len);
+
         // Write header
         let header = item.apci.encode_header(asdu_len);
         dst.extend_from_slice(&header);
 
-        // Write ASDU if present
-        if let Some(asdu_bytes) = asdu_bytes {
-            dst.extend_from_slice(&asdu_bytes);
+        // Write ASDU directly to dst if present (zero-copy)
+        if let Some(asdu) = &item.asdu {
+            asdu.encode_to(dst);
         }
 
         Ok(())

@@ -127,6 +127,7 @@ pub enum TypeId {
 
 impl TypeId {
     /// Create TypeId from raw byte value.
+    #[inline]
     pub fn from_u8(value: u8) -> Result<Self> {
         match value {
             1 => Ok(Self::SinglePoint),
@@ -168,21 +169,25 @@ impl TypeId {
     }
 
     /// Convert to raw byte value.
-    pub fn as_u8(self) -> u8 {
+    #[inline]
+    pub const fn as_u8(self) -> u8 {
         self as u8
     }
 
     /// Check if this type is in the monitoring direction (from RTU to master).
+    #[inline]
     pub fn is_monitoring(&self) -> bool {
         matches!(self.as_u8(), 1..=70)
     }
 
     /// Check if this type is in the control direction (from master to RTU).
+    #[inline]
     pub fn is_control(&self) -> bool {
         matches!(self.as_u8(), 45..=51 | 58..=63 | 100..=107)
     }
 
     /// Check if this type contains a time tag.
+    #[inline]
     pub fn has_time_tag(&self) -> bool {
         matches!(
             self,

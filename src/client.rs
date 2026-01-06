@@ -241,7 +241,7 @@ impl Iec104Client {
         let response = self.recv_frame_timeout(self.config.t1_timeout).await?;
 
         match response.apci {
-            crate::types::Apci::UFrame { function } if function == UFunction::StartDtCon => {
+            crate::types::Apci::UFrame { function: UFunction::StartDtCon } => {
                 self.state = ConnectionState::Active;
                 self.emit_event(Iec104Event::DataTransferStarted).await;
                 Ok(())
@@ -263,7 +263,7 @@ impl Iec104Client {
         let response = self.recv_frame_timeout(self.config.t1_timeout).await?;
 
         match response.apci {
-            crate::types::Apci::UFrame { function } if function == UFunction::StopDtCon => {
+            crate::types::Apci::UFrame { function: UFunction::StopDtCon } => {
                 self.state = ConnectionState::Connected;
                 self.emit_event(Iec104Event::DataTransferStopped).await;
                 Ok(())
@@ -297,7 +297,7 @@ impl Iec104Client {
         ));
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(0),
-            data: Bytes::from(vec![group]),
+            data: Bytes::copy_from_slice(&[group]),
         });
 
         self.send_i_frame(asdu).await
@@ -339,7 +339,7 @@ impl Iec104Client {
 
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(ioa),
-            data: Bytes::from(vec![sco]),
+            data: Bytes::copy_from_slice(&[sco]),
         });
 
         self.send_i_frame(asdu).await
@@ -371,7 +371,7 @@ impl Iec104Client {
 
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(ioa),
-            data: Bytes::from(vec![dco]),
+            data: Bytes::copy_from_slice(&[dco]),
         });
 
         self.send_i_frame(asdu).await
@@ -399,14 +399,11 @@ impl Iec104Client {
         // Value (4 bytes) + QOS (1 byte)
         let value_bytes = value.to_le_bytes();
         let qos = if select { 0x80 } else { 0x00 };
-
-        let mut data = Vec::with_capacity(5);
-        data.extend_from_slice(&value_bytes);
-        data.push(qos);
+        let data = [value_bytes[0], value_bytes[1], value_bytes[2], value_bytes[3], qos];
 
         asdu.objects.push(InformationObject {
             ioa: Ioa::new(ioa),
-            data: Bytes::from(data),
+            data: Bytes::copy_from_slice(&data),
         });
 
         self.send_i_frame(asdu).await
@@ -567,21 +564,21 @@ impl Iec104Client {
 
     fn acknowledge_up_to(&mut self, recv_seq: u16) {
         // Calculate number of acknowledged frames
-        let acked = if recv_seq >= self.send_seq - self.unconfirmed_sends as u16 {
-            recv_seq - (self.send_seq - self.unconfirmed_sends as u16)
+        let acked = if recv_seq >= self.send_seq - self.unconfirmed_sends {
+            recv_seq - (self.send_seq - self.unconfirmed_sends)
         } else {
             // Wrap around
-            (32768 - (self.send_seq - self.unconfirmed_sends as u16)) + recv_seq
+            (32768 - (self.send_seq - self.unconfirmed_sends)) + recv_seq
         };
 
         if acked <= self.unconfirmed_sends {
-            self.unconfirmed_sends -= acked as u16;
+            self.unconfirmed_sends -= acked;
         }
     }
 
     /// Process received ASDU and convert to appropriate event.
     fn process_asdu(&self, asdu: Asdu) -> Iec104Event {
-        use crate::types::{Cot, TypeId};
+        use crate::types::TypeId;
 
         // Check for special COT values
         match asdu.header.cot {

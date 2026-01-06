@@ -130,6 +130,7 @@ pub enum Cot {
 
 impl Cot {
     /// Create COT from raw byte value (lower 6 bits).
+    #[inline]
     pub fn from_u8(value: u8) -> Result<Self> {
         // COT is in the lower 6 bits
         let cot_value = value & 0x3F;
@@ -179,11 +180,13 @@ impl Cot {
     }
 
     /// Convert to raw byte value.
-    pub fn as_u8(self) -> u8 {
+    #[inline]
+    pub const fn as_u8(self) -> u8 {
         self as u8
     }
 
     /// Check if this is a positive confirmation.
+    #[inline]
     pub fn is_positive(&self) -> bool {
         matches!(
             self,
@@ -192,6 +195,7 @@ impl Cot {
     }
 
     /// Check if this is a negative confirmation.
+    #[inline]
     pub fn is_negative(&self) -> bool {
         matches!(
             self,
@@ -200,11 +204,13 @@ impl Cot {
     }
 
     /// Check if this COT indicates an interrogation response.
+    #[inline]
     pub fn is_interrogation_response(&self) -> bool {
         matches!(self.as_u8(), 20..=36)
     }
 
     /// Check if this COT indicates a counter request response.
+    #[inline]
     pub fn is_counter_response(&self) -> bool {
         matches!(self.as_u8(), 37..=41)
     }

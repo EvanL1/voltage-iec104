@@ -224,6 +224,7 @@ impl Quality {
     }
 
     /// Parse from QDS byte (Quality Descriptor for measured values).
+    #[inline]
     pub fn from_qds(byte: u8) -> Self {
         Self {
             overflow: (byte & 0x01) != 0,
@@ -236,6 +237,7 @@ impl Quality {
     }
 
     /// Parse from SIQ byte (Single-point Information with Quality).
+    #[inline]
     pub fn from_siq(byte: u8) -> Self {
         Self {
             overflow: false,
@@ -248,6 +250,7 @@ impl Quality {
     }
 
     /// Parse from DIQ byte (Double-point Information with Quality).
+    #[inline]
     pub fn from_diq(byte: u8) -> Self {
         Self {
             overflow: false,
@@ -260,6 +263,7 @@ impl Quality {
     }
 
     /// Parse from BCR flags (Binary Counter Reading).
+    #[inline]
     pub fn from_bcr_flags(byte: u8) -> Self {
         Self {
             overflow: false,
@@ -272,6 +276,7 @@ impl Quality {
     }
 
     /// Check if quality is good (no flags set).
+    #[inline]
     pub fn is_good(&self) -> bool {
         !self.overflow
             && !self.blocked
@@ -285,29 +290,37 @@ impl Quality {
 impl std::fmt::Display for Quality {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_good() {
-            write!(f, "Good")
-        } else {
-            let mut flags = Vec::new();
-            if self.overflow {
-                flags.push("OV");
-            }
-            if self.blocked {
-                flags.push("BL");
-            }
-            if self.substituted {
-                flags.push("SB");
-            }
-            if self.not_topical {
-                flags.push("NT");
-            }
-            if self.invalid {
-                flags.push("IV");
-            }
-            if self.elapsed_time_invalid {
-                flags.push("EI");
-            }
-            write!(f, "{}", flags.join("|"))
+            return f.write_str("Good");
         }
+
+        let mut first = true;
+        let mut write_flag = |f: &mut std::fmt::Formatter<'_>, flag: &str| -> std::fmt::Result {
+            if !first {
+                f.write_str("|")?;
+            }
+            first = false;
+            f.write_str(flag)
+        };
+
+        if self.overflow {
+            write_flag(f, "OV")?;
+        }
+        if self.blocked {
+            write_flag(f, "BL")?;
+        }
+        if self.substituted {
+            write_flag(f, "SB")?;
+        }
+        if self.not_topical {
+            write_flag(f, "NT")?;
+        }
+        if self.invalid {
+            write_flag(f, "IV")?;
+        }
+        if self.elapsed_time_invalid {
+            write_flag(f, "EI")?;
+        }
+        Ok(())
     }
 }
 

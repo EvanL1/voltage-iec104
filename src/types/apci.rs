@@ -43,7 +43,8 @@ pub enum UFunction {
 
 impl UFunction {
     /// Get the control field byte for this U-function.
-    pub fn control_byte(&self) -> u8 {
+    #[inline]
+    pub const fn control_byte(&self) -> u8 {
         match self {
             Self::StartDtAct => 0x07, // 0000 0111
             Self::StartDtCon => 0x0B, // 0000 1011
@@ -55,6 +56,7 @@ impl UFunction {
     }
 
     /// Parse U-function from control byte.
+    #[inline]
     pub fn from_control_byte(byte: u8) -> Result<Self> {
         match byte {
             0x07 => Ok(Self::StartDtAct),
@@ -105,21 +107,25 @@ pub enum Apci {
 
 impl Apci {
     /// Create a new I-frame APCI.
+    #[inline]
     pub fn i_frame(send_seq: u16, recv_seq: u16) -> Self {
         Self::IFrame { send_seq, recv_seq }
     }
 
     /// Create a new S-frame APCI.
+    #[inline]
     pub fn s_frame(recv_seq: u16) -> Self {
         Self::SFrame { recv_seq }
     }
 
     /// Create a new U-frame APCI.
+    #[inline]
     pub fn u_frame(function: UFunction) -> Self {
         Self::UFrame { function }
     }
 
     /// Get the frame type.
+    #[inline]
     pub fn frame_type(&self) -> FrameType {
         match self {
             Self::IFrame { .. } => FrameType::IFrame,
@@ -161,6 +167,7 @@ impl Apci {
     }
 
     /// Encode APCI to 4 bytes of control field.
+    #[inline]
     pub fn encode(&self) -> [u8; 4] {
         match self {
             Self::IFrame { send_seq, recv_seq } => {
@@ -182,6 +189,7 @@ impl Apci {
     /// Encode full APDU header (6 bytes: start + length + control).
     ///
     /// `asdu_len` is the length of the ASDU that follows (0 for S-frame and U-frame).
+    #[inline]
     pub fn encode_header(&self, asdu_len: usize) -> [u8; 6] {
         let control = self.encode();
         let apdu_len = (4 + asdu_len) as u8;
@@ -191,21 +199,25 @@ impl Apci {
     }
 
     /// Check if this is an I-frame.
+    #[inline]
     pub fn is_i_frame(&self) -> bool {
         matches!(self, Self::IFrame { .. })
     }
 
     /// Check if this is an S-frame.
+    #[inline]
     pub fn is_s_frame(&self) -> bool {
         matches!(self, Self::SFrame { .. })
     }
 
     /// Check if this is a U-frame.
+    #[inline]
     pub fn is_u_frame(&self) -> bool {
         matches!(self, Self::UFrame { .. })
     }
 
     /// Get the send sequence number (I-frame only).
+    #[inline]
     pub fn send_seq(&self) -> Option<u16> {
         match self {
             Self::IFrame { send_seq, .. } => Some(*send_seq),
@@ -214,6 +226,7 @@ impl Apci {
     }
 
     /// Get the receive sequence number (I-frame and S-frame).
+    #[inline]
     pub fn recv_seq(&self) -> Option<u16> {
         match self {
             Self::IFrame { recv_seq, .. } | Self::SFrame { recv_seq } => Some(*recv_seq),
